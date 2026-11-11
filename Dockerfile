@@ -4,12 +4,12 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm install --no-audit --no-fund
 
 COPY index.html metadata.json tsconfig.json vite.config.ts server.ts ./
 COPY src ./src
 
-RUN npm run build && npm prune --omit=dev
+RUN npm run build && npm prune --omit=dev --no-audit --no-fund
 
 # Stage 2: Lean production runtime
 FROM node:22-alpine AS runner
