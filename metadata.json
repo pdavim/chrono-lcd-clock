@@ -1,0 +1,6 @@
+{
+  "name": "Chrono80 LCD Timer",
+  "description": "Full-screen horizontal iPad and desktop timer clock featuring an authentic 1980s Timex 7-segment LCD aesthetic, stopwatch, countdown timer, live millisecond clock, customizable fields (HH:MM:SS:MS), fonts, size, and colors.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

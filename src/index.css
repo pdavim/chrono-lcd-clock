@@ -1,0 +1,256 @@
+@import "tailwindcss";
+@import "dseg/css/dseg.css";
+@import "@fontsource/vt323/400.css";
+@import "@fontsource/share-tech-mono/400.css";
+@import "@fontsource/orbitron/700.css";
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+
+:root {
+  --clock-color: #38ff9c;
+  --clock-bg: #0b0f12;
+  --clock-font: 'DSEG7-Classic', monospace;
+  --clock-font-style: normal;
+  --clock-size-vw: 9.5;
+  --clock-width-em: 9.15;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: var(--clock-bg);
+    color: var(--clock-color);
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.clock-canvas {
+  background-color: var(--clock-bg);
+  color: var(--clock-color);
+  transition: background-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.clock-digits {
+  font-family: var(--clock-font);
+  font-style: var(--clock-font-style);
+  font-size: min(
+    calc(var(--clock-size-vw) * 1vw),
+    calc(91vw / var(--clock-width-em)),
+    52dvh
+  );
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.session-subcounter-digits {
+  font-family: var(--clock-font);
+  font-style: var(--clock-font-style);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+@keyframes alarmBlink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.16;
+  }
+}
+
+@keyframes phaseFlash {
+  0% {
+    opacity: 0.25;
+    transform: scale(0.985);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.clock-bg-flash-layer {
+  background-color: var(--clock-color);
+}
+
+@keyframes screenCuePulse {
+  0% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes bgFlashPhase {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.5;
+  }
+  45% {
+    opacity: 0.06;
+  }
+  70% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes bgFlashComplete {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.58;
+  }
+  25% {
+    opacity: 0.05;
+  }
+  37% {
+    opacity: 0.58;
+  }
+  50% {
+    opacity: 0.05;
+  }
+  62% {
+    opacity: 0.58;
+  }
+  75% {
+    opacity: 0.05;
+  }
+  88% {
+    opacity: 0.58;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes bgFlashGentle {
+  0% {
+    opacity: 0.32;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-alarm-blink {
+  animation: alarmBlink 0.75s ease-in-out infinite;
+}
+
+.animate-phase-flash {
+  animation: phaseFlash 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-screen-cue {
+  animation: screenCuePulse 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-bg-flash-phase {
+  animation: bgFlashPhase 0.9s ease-in-out forwards;
+}
+
+.animate-bg-flash-complete {
+  animation: bgFlashComplete 2.1s ease-in-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-alarm-blink,
+  .animate-phase-flash,
+  .animate-screen-cue {
+    animation: none;
+  }
+
+  .animate-bg-flash-phase,
+  .animate-bg-flash-complete {
+    animation: bgFlashGentle 0.9s ease-out forwards;
+  }
+}
+
+/* Native color input clean circular styling */
+.color-swatch-input {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.color-swatch-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-swatch-input::-webkit-color-swatch {
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-radius: 9999px;
+}
+
+.color-swatch-input::-moz-color-swatch {
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-radius: 9999px;
+}
+
+/* Hide number input spinners for clean compact time entry */
+.clean-num-input {
+  -moz-appearance: textfield;
+  font-variant-numeric: tabular-nums;
+}
+
+.clean-num-input::-webkit-inner-spin-button,
+.clean-num-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.alarm-action-primary {
+  background-color: var(--clock-color);
+  color: var(--clock-bg);
+}
+
+.alarm-action-secondary {
+  border-color: var(--clock-color);
+  color: var(--clock-color);
+  background-color: transparent;
+}
+
+.clock-dim-surface {
+  opacity: 1;
+  transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.clock-auto-dimmed {
+  opacity: 0.22;
+  transition: opacity 800ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clock-dim-surface,
+  .clock-auto-dimmed {
+    transition: none;
+  }
+}
+
+
