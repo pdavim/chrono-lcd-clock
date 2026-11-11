@@ -1,8 +1,10 @@
 import { DEFAULT_MEDIA_CONFIG, MediaConfig } from './media';
+import { DEFAULT_SOLAR_SCHEDULE, SolarScheduleSettings } from './solar';
 
 export enum ClockMode {
   Stopwatch = 'stopwatch',
   Countdown = 'countdown',
+  TimeUntil = 'time-until',
   Interval = 'interval',
   FocusSession = 'focus',
   AlarmClock = 'alarm',
@@ -59,6 +61,12 @@ export interface VisibleFields {
 export type TimeFieldKey = keyof VisibleFields;
 
 export interface CountdownTarget {
+  hh: number;
+  mm: number;
+  ss: number;
+}
+
+export interface TimeUntilTarget {
   hh: number;
   mm: number;
   ss: number;
@@ -121,6 +129,7 @@ export interface ClockSettings {
   showBatteryLevel: boolean;
   autoDimEnabled: boolean;
   countdownTarget: CountdownTarget;
+  timeUntilTarget: TimeUntilTarget;
   intervalConfig: IntervalConfig;
   focusConfig: FocusConfig;
   alarmClock: AlarmClockConfig;
@@ -136,6 +145,7 @@ export interface ClockSettings {
   clockSizeVw: number;
   clockColor: string;
   bgColor: string;
+  solarSchedule: SolarScheduleSettings;
 }
 
 export interface FontDefinition {
@@ -263,6 +273,11 @@ export const DEFAULT_SETTINGS: ClockSettings = {
     mm: 5,
     ss: 0,
   },
+  timeUntilTarget: {
+    hh: 17,
+    mm: 0,
+    ss: 0,
+  },
   intervalConfig: {
     work: { hh: 0, mm: 0, ss: 30 },
     rest: { hh: 0, mm: 0, ss: 10 },
@@ -291,6 +306,7 @@ export const DEFAULT_SETTINGS: ClockSettings = {
   clockSizeVw: 9.5,
   clockColor: '#38ff9c',
   bgColor: '#0b0f12',
+  solarSchedule: { ...DEFAULT_SOLAR_SCHEDULE },
 };
 
 export function padDigits(value: number, digits = 2): string {
@@ -410,6 +426,59 @@ export function sanitizeCountdownTarget(
 export function countdownTargetToMs(target: CountdownTarget): number {
   const clean = sanitizeCountdownTarget(target);
   return (clean.hh * 3600 + clean.mm * 60 + clean.ss) * 1000;
+}
+
+export function sanitizeTimeUntilTarget(
+  raw: Partial<TimeUntilTarget>
+): TimeUntilTarget {
+  const clampInt = (val: number | undefined, min: number, max: number): number => {
+    if (val === undefined || !Number.isFinite(val)) return min;
+    return Math.min(max, Math.max(min, Math.floor(val)));
+  };
+
+  return {
+    hh: clampInt(raw.hh, 0, 23),
+    mm: clampInt(raw.mm, 0, 59),
+    ss: clampInt(raw.ss, 0, 59),
+  };
+}
+
+export function formatTimeUntilLabel(target: TimeUntilTarget): string {
+  const clean = sanitizeTimeUntilTarget(target);
+  return `${padDigits(clean.hh)}:${padDigits(clean.mm)}:${padDigits(clean.ss)}`;
+}
+
+export function resolveNextTargetTimestampMs(
+  now: Date,
+  target: TimeUntilTarget
+): { targetTimestampMs: number; isTomorrow: boolean } {
+  const clean = sanitizeTimeUntilTarget(target);
+  const candidate = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    clean.hh,
+    clean.mm,
+    clean.ss,
+    0
+  );
+  let isTomorrow = false;
+  if (candidate.getTime() <= now.getTime()) {
+    candidate.setDate(candidate.getDate() + 1);
+    isTomorrow = true;
+  }
+  return {
+    targetTimestampMs: candidate.getTime(),
+    isTomorrow,
+  };
+}
+
+export function computeMsUntilTargetTime(
+  now: Date,
+  target: TimeUntilTarget
+): number {
+  const { targetTimestampMs } = resolveNextTargetTimestampMs(now, target);
+  return Math.max(0, targetTimestampMs - now.getTime());
 }
 
 export function sanitizeIntervalConfig(raw: Partial<IntervalConfig>): IntervalConfig {

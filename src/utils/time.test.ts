@@ -14,6 +14,7 @@ import {
   advanceIntervalPhase,
   buildDisplayString,
   computeMsUntilAlarm,
+  computeMsUntilTargetTime,
   countdownTargetToMs,
   createInitialFocusState,
   createInitialIntervalState,
@@ -27,10 +28,13 @@ import {
   formatLiveClockDate,
   formatRemainingTimeBrief,
   formatSessionElapsedHhMmSs,
+  formatTimeUntilLabel,
+  resolveNextTargetTimestampMs,
   sanitizeAlarmClockConfig,
   sanitizeCountdownTarget,
   sanitizeFocusConfig,
   sanitizeIntervalConfig,
+  sanitizeTimeUntilTarget,
   shouldAutoDimDisplay,
   shouldShowRadioControlBar,
   stepFocusState,
@@ -554,6 +558,44 @@ test('shouldShowRadioControlBar respects Display toggle, UI hide, and Settings m
     false
   );
 });
+
+test('TimeUntil mode calculates exact remaining ms for same-day and next-day future targets', () => {
+  assert.equal(ClockMode.TimeUntil, 'time-until');
+  assert.deepEqual(DEFAULT_SETTINGS.timeUntilTarget, { hh: 17, mm: 0, ss: 0 });
+
+  const clamped = sanitizeTimeUntilTarget({ hh: 29, mm: -3, ss: 88 });
+  assert.deepEqual(clamped, { hh: 23, mm: 0, ss: 59 });
+  assert.equal(formatTimeUntilLabel({ hh: 9, mm: 5, ss: 3 }), '09:05:03');
+
+  // Same-day future target: 08:40:00.250 -> target 08:45:10.000 = 5m 09.750s
+  const morning = new Date(2026, 10, 11, 8, 40, 0, 250);
+  const sameDay = resolveNextTargetTimestampMs(morning, { hh: 8, mm: 45, ss: 10 });
+  assert.equal(sameDay.isTomorrow, false);
+  const sameDayMs = computeMsUntilTargetTime(morning, { hh: 8, mm: 45, ss: 10 });
+  assert.equal(sameDayMs, (5 * 60 + 9) * 1000 + 750);
+  assert.equal(
+    formatDurationMs(sameDayMs, { hh: true, mm: true, ss: true, ms: true }),
+    '00:05:09:750'
+  );
+
+  // Target earlier than current time rolls over to tomorrow (+23h)
+  const evening = new Date(2026, 10, 11, 18, 0, 0, 0);
+  const nextDay = resolveNextTargetTimestampMs(evening, { hh: 17, mm: 0, ss: 0 });
+  assert.equal(nextDay.isTomorrow, true);
+  assert.equal(
+    computeMsUntilTargetTime(evening, { hh: 17, mm: 0, ss: 0 }),
+    23 * 3600 * 1000
+  );
+
+  // Exact current timestamp rolls over to +24h future occurrence
+  const exactMatch = resolveNextTargetTimestampMs(evening, { hh: 18, mm: 0, ss: 0 });
+  assert.equal(exactMatch.isTomorrow, true);
+  assert.equal(
+    computeMsUntilTargetTime(evening, { hh: 18, mm: 0, ss: 0 }),
+    24 * 3600 * 1000
+  );
+});
+
 
 
 

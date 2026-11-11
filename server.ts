@@ -3,12 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import express, { Request, Response } from 'express';
+import express, { type Request, type Response } from 'express';
 
 dotenv.config();
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 interface SpotifySession {
   accessToken: string;
@@ -67,8 +67,9 @@ function getBaseAppUrl(req: Request): string {
   const forwardedHost = (req.headers['x-forwarded-host'] as string | undefined)
     ?.split(',')[0]
     ?.trim();
-  if (forwardedHost) {
-    return `${forwardedProto || 'https'}://${forwardedHost}`;
+  const host = forwardedHost || req.headers.host?.trim();
+  if (forwardedHost || (forwardedProto && host)) {
+    return `${forwardedProto || 'https'}://${host}`;
   }
   return `http://localhost:${PORT}`;
 }
@@ -141,7 +142,13 @@ async function refreshSpotifySessionIfNeeded(
 
 async function startServer(): Promise<void> {
   const app = express();
+  app.set('trust proxy', 1);
   app.use(express.json());
+
+  // 0. Healthcheck endpoint for Docker / Dokploy / reverse proxies
+  app.get('/api/health', (_req: Request, res: Response) => {
+    res.status(200).json({ status: 'ok', uptime: Math.floor(process.uptime()) });
+  });
 
   // 1. Live Internet Radio Search Proxy (Radio-Browser API)
   app.get('/api/radio/search', async (req: Request, res: Response) => {

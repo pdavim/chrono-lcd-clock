@@ -82,6 +82,7 @@ export function CornerControls({
   const isTimerMode =
     mode === ClockMode.Stopwatch ||
     mode === ClockMode.Countdown ||
+    mode === ClockMode.TimeUntil ||
     mode === ClockMode.Interval ||
     mode === ClockMode.FocusSession;
 

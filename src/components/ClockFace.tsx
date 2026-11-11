@@ -7,8 +7,10 @@ import {
   IntervalPhase,
   IntervalState,
   LiveClockTimezone,
+  TimeUntilTarget,
   formatAlarmTimeLabel,
   formatDurationMs,
+  formatTimeUntilLabel,
 } from '../utils/time';
 
 export interface BgFlashEvent {
@@ -29,6 +31,8 @@ interface ClockFaceProps {
   intervalState: IntervalState;
   focusState: FocusState;
   alarmClock: AlarmClockConfig;
+  timeUntilTarget: TimeUntilTarget;
+  isTimeUntilTomorrow: boolean;
   isAlarmBlinking: boolean;
   isAlarmClockRinging: boolean;
   snoozeRemainingMs: number | null;
@@ -52,6 +56,8 @@ export function ClockFace({
   intervalState,
   focusState,
   alarmClock,
+  timeUntilTarget,
+  isTimeUntilTomorrow,
   isAlarmBlinking,
   isAlarmClockRinging,
   snoozeRemainingMs,
@@ -214,6 +220,44 @@ export function ClockFace({
           className="mb-6 flex items-center justify-center gap-2 text-base sm:text-xl md:text-2xl font-semibold tracking-wider opacity-90 select-none"
         >
           <span>Time Up</span>
+        </div>
+      );
+    }
+
+    if (mode === ClockMode.TimeUntil) {
+      if (isAlarmBlinking) {
+        return (
+          <div
+            data-testid="time-until-status"
+            aria-live="assertive"
+            className="mb-6 flex items-center justify-center gap-3 text-base sm:text-xl md:text-2xl font-semibold tracking-wider opacity-95 tabular-nums select-none"
+          >
+            <span>Target Reached</span>
+            <span aria-hidden="true" className="opacity-45">
+              ·
+            </span>
+            <span className="font-normal opacity-85">
+              {formatTimeUntilLabel(timeUntilTarget)}
+            </span>
+          </div>
+        );
+      }
+
+      return (
+        <div
+          data-testid="time-until-status"
+          aria-live="polite"
+          className="mb-6 flex items-center justify-center gap-3 text-base sm:text-xl md:text-2xl font-semibold tracking-wider opacity-90 tabular-nums select-none"
+        >
+          <span>Until {formatTimeUntilLabel(timeUntilTarget)}</span>
+          {isTimeUntilTomorrow && (
+            <>
+              <span aria-hidden="true" className="opacity-45">
+                ·
+              </span>
+              <span className="font-normal opacity-80">Tomorrow</span>
+            </>
+          )}
         </div>
       );
     }

@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+coverage
+.git
+.gitignore
+.aistudio
+.playwright-cli
+.DS_Store
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example
+src/**/*.test.ts

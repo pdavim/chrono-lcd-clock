@@ -1,0 +1,35 @@
+services:
+  chrono80:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # Dokploy routes HTTPS domain traffic via Traefik to internal port 3000.
+    # In Dokploy Dashboard -> Domains -> Add Domain:
+    #   Service Name: chrono80
+    #   Container Port: 3000
+    # (Dokploy automatically attaches dokploy-network and Traefik labels.)
+    expose:
+      - "3000"
+    # Uncomment 'ports' below ONLY if running standalone Docker Compose without Dokploy/Traefik:
+    # ports:
+    #   - "${HOST_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      APP_URL: ${APP_URL:-}
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

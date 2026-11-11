@@ -13,10 +13,16 @@ import {
 } from './utils/media';
 import {
   DEFAULT_TIMER_PRESETS,
+  PresetCategory,
   SavedTimerPreset,
   createTimerPreset,
   sanitizePresetsList,
 } from './utils/presets';
+import {
+  resolveScheduledThemeColors,
+  sanitizeGeoCoordinates,
+  sanitizeSolarScheduleSettings,
+} from './utils/solar';
 import {
   playCompletionAlarm,
   playMechanicalTickTock,
@@ -43,6 +49,7 @@ import {
   IntervalState,
   LiveClockTimezone,
   TimeFieldKey,
+  TimeUntilTarget,
   countdownTargetToMs,
   createInitialFocusState,
   createInitialIntervalState,
@@ -54,10 +61,12 @@ import {
   formatLiveClockDate,
   formatSessionElapsedHhMmSs,
   getFontDefinition,
+  resolveNextTargetTimestampMs,
   sanitizeAlarmClockConfig,
   sanitizeCountdownTarget,
   sanitizeFocusConfig,
   sanitizeIntervalConfig,
+  sanitizeTimeUntilTarget,
   shouldAutoDimDisplay,
   stepFocusState,
   stepIntervalState,
@@ -124,6 +133,9 @@ function loadSavedSettings(): ClockSettings {
       countdownTarget: sanitizeCountdownTarget(
         parsed.countdownTarget ?? DEFAULT_SETTINGS.countdownTarget
       ),
+      timeUntilTarget: sanitizeTimeUntilTarget(
+        parsed.timeUntilTarget ?? DEFAULT_SETTINGS.timeUntilTarget
+      ),
       intervalConfig: sanitizeIntervalConfig(
         parsed.intervalConfig ?? DEFAULT_SETTINGS.intervalConfig
       ),
@@ -180,6 +192,7 @@ function loadSavedSettings(): ClockSettings {
         typeof parsed.bgColor === 'string' && parsed.bgColor.startsWith('#')
           ? parsed.bgColor
           : DEFAULT_SETTINGS.bgColor,
+      solarSchedule: sanitizeSolarScheduleSettings(parsed.solarSchedule),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -201,7 +214,14 @@ export default function App() {
   const [presets, setPresets] = useState<SavedTimerPreset[]>(() =>
     loadSavedPresets()
   );
-  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [isRunning, setIsRunning] = useState<boolean>(
+    () => settings.mode === ClockMode.TimeUntil
+  );
+  const [isTimeUntilTomorrow, setIsTimeUntilTomorrow] = useState<boolean>(
+    () =>
+      resolveNextTargetTimestampMs(new Date(), settings.timeUntilTarget)
+        .isTomorrow
+  );
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [requestedSettingsTab, setRequestedSettingsTab] = useState<{
     key: number;
@@ -217,6 +237,11 @@ export default function App() {
   const [snoozeRemainingMs, setSnoozeRemainingMs] = useState<number | null>(null);
   const [phaseFlashKey, setPhaseFlashKey] = useState<number>(0);
   const [bgFlashEvent, setBgFlashEvent] = useState<BgFlashEvent | null>(null);
+  const [solarGeoStatus, setSolarGeoStatus] = useState<
+    'idle' | 'locating' | 'ready' | 'error'
+  >(() => (settings.solarSchedule.coords ? 'ready' : 'idle'));
+  const [solarGeoError, setSolarGeoError] = useState<string | null>(null);
+  const [solarEvalTick, setSolarEvalTick] = useState<number>(() => Date.now());
 
   const sessionStartedAtMsRef = useRef<number>(Date.now());
   const [sessionElapsedText, setSessionElapsedText] = useState<string>('00:00:00');
@@ -246,6 +271,10 @@ export default function App() {
   const isRunningRef = useRef<boolean>(isRunning);
   isRunningRef.current = isRunning;
 
+  const isSettingsOpenRef = useRef<boolean>(isSettingsOpen);
+  isSettingsOpenRef.current = isSettingsOpen;
+  const lastModalPaintMsRef = useRef<number>(0);
+
   const isAlarmClockRingingRef = useRef<boolean>(isAlarmClockRinging);
   isAlarmClockRingingRef.current = isAlarmClockRinging;
 
@@ -259,6 +288,17 @@ export default function App() {
     countdownTargetToMs(settings.countdownTarget)
   );
   const countdownEndTimestampRef = useRef<number>(0);
+
+  const initialTimeUntil = resolveNextTargetTimestampMs(
+    new Date(),
+    settings.timeUntilTarget
+  );
+  const timeUntilEpochMsRef = useRef<number>(
+    initialTimeUntil.targetTimestampMs
+  );
+  const timeUntilRemainingRef = useRef<number>(
+    Math.max(0, initialTimeUntil.targetTimestampMs - Date.now())
+  );
 
   const intervalStateRef = useRef<IntervalState>(intervalState);
   intervalStateRef.current = intervalState;
@@ -337,21 +377,128 @@ export default function App() {
     }
   }, [presets]);
 
+  const requestBrowserGeolocation = useCallback((forceFresh = false) => {
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+      setSolarGeoStatus('error');
+      setSolarGeoError(
+        'Browser Geolocation API is not supported on this device.'
+      );
+      return;
+    }
+
+    setSolarGeoStatus('locating');
+    setSolarGeoError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const coords = sanitizeGeoCoordinates({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        if (!coords) {
+          setSolarGeoStatus('error');
+          setSolarGeoError('Received invalid coordinates from browser.');
+          return;
+        }
+        setSolarGeoStatus('ready');
+        setSolarGeoError(null);
+        setSolarEvalTick(Date.now());
+        setSettings((prev) => ({
+          ...prev,
+          solarSchedule: {
+            ...prev.solarSchedule,
+            enabled: true,
+            coords,
+          },
+        }));
+      },
+      (err) => {
+        setSolarGeoStatus('error');
+        const message =
+          err.code === 1
+            ? 'Location permission denied. Allow location access and retry.'
+            : 'Unable to determine current location. Check location services and retry.';
+        setSolarGeoError(message);
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: forceFresh ? 0 : 60_000,
+      }
+    );
+  }, []);
+
+  const handleToggleSolarSchedule = useCallback(() => {
+    if (settingsRef.current.solarSchedule.enabled) {
+      setSolarGeoError(null);
+      setSettings((prev) => ({
+        ...prev,
+        solarSchedule: {
+          ...prev.solarSchedule,
+          enabled: false,
+        },
+      }));
+      return;
+    }
+
+    setSolarEvalTick(Date.now());
+    setSettings((prev) => ({
+      ...prev,
+      solarSchedule: {
+        ...prev.solarSchedule,
+        enabled: true,
+      },
+    }));
+
+    if (!settingsRef.current.solarSchedule.coords) {
+      requestBrowserGeolocation();
+    } else {
+      setSolarGeoStatus('ready');
+      setSolarGeoError(null);
+    }
+  }, [requestBrowserGeolocation]);
+
+  useEffect(() => {
+    if (!settings.solarSchedule.enabled) {
+      return undefined;
+    }
+    if (!settings.solarSchedule.coords) {
+      requestBrowserGeolocation();
+      return undefined;
+    }
+    setSolarEvalTick(Date.now());
+    const id = window.setInterval(() => {
+      setSolarEvalTick(Date.now());
+    }, 15_000);
+    return () => window.clearInterval(id);
+  }, [
+    settings.solarSchedule.enabled,
+    settings.solarSchedule.coords,
+    requestBrowserGeolocation,
+  ]);
+
+  const scheduledTheme = resolveScheduledThemeColors({
+    now: new Date(solarEvalTick),
+    preferredClockColor: settings.clockColor,
+    preferredBgColor: settings.bgColor,
+    solarSchedule: settings.solarSchedule,
+  });
+
   // Sync dynamic CSS variables to :root (zero inline style={{}} needed)
   useEffect(() => {
     const root = document.documentElement;
     const fontDef = getFontDefinition(settings.fontId);
     const widthEm = estimateDisplayWidthEm(settings.visibleFields, settings.fontId);
 
-    root.style.setProperty('--clock-color', settings.clockColor);
-    root.style.setProperty('--clock-bg', settings.bgColor);
+    root.style.setProperty('--clock-color', scheduledTheme.activeClockColor);
+    root.style.setProperty('--clock-bg', scheduledTheme.activeBgColor);
     root.style.setProperty('--clock-font', fontDef.family);
     root.style.setProperty('--clock-font-style', fontDef.italic ? 'italic' : 'normal');
     root.style.setProperty('--clock-size-vw', String(settings.clockSizeVw));
     root.style.setProperty('--clock-width-em', String(widthEm));
   }, [
-    settings.clockColor,
-    settings.bgColor,
+    scheduledTheme.activeClockColor,
+    scheduledTheme.activeBgColor,
     settings.fontId,
     settings.clockSizeVw,
     settings.visibleFields,
@@ -381,6 +528,12 @@ export default function App() {
       if (currentSettings.mode === ClockMode.Countdown) {
         return formatDurationMs(
           countdownRemainingRef.current,
+          currentSettings.visibleFields
+        );
+      }
+      if (currentSettings.mode === ClockMode.TimeUntil) {
+        return formatDurationMs(
+          timeUntilRemainingRef.current,
           currentSettings.visibleFields
         );
       }
@@ -724,6 +877,58 @@ export default function App() {
       return () => window.cancelAnimationFrame(frameId);
     }
 
+    if (settings.mode === ClockMode.TimeUntil) {
+      const tickTimeUntil = () => {
+        if (!isRunningRef.current) return;
+        const remaining = timeUntilEpochMsRef.current - Date.now();
+
+        if (remaining <= 0) {
+          timeUntilRemainingRef.current = 0;
+          isRunningRef.current = false;
+          setIsRunning(false);
+          setIsAlarmBlinking(true);
+          setIsAutoDimmed(false);
+          setPhaseFlashKey((k) => k + 1);
+          if (settingsRef.current.visualFlashEnabled) {
+            setBgFlashEvent((prev) => ({
+              key: (prev?.key ?? 0) + 1,
+              kind: 'complete',
+            }));
+          }
+          if (displayRef.current) {
+            displayRef.current.textContent = formatDurationMs(
+              0,
+              settingsRef.current.visibleFields
+            );
+          }
+          playCompletionAlarm(
+            settingsRef.current.alarmSoundEnabled,
+            settingsRef.current.alarmSoundId,
+            settingsRef.current.gradualAlarmVolume
+          );
+          triggerVibration(settingsRef.current.vibrationEnabled, 'complete');
+          return;
+        }
+
+        timeUntilRemainingRef.current = remaining;
+        const nowPerf = performance.now();
+        if (
+          displayRef.current &&
+          (!isSettingsOpenRef.current ||
+            nowPerf - lastModalPaintMsRef.current >= 250)
+        ) {
+          lastModalPaintMsRef.current = nowPerf;
+          displayRef.current.textContent = formatDurationMs(
+            remaining,
+            settingsRef.current.visibleFields
+          );
+        }
+        frameId = window.requestAnimationFrame(tickTimeUntil);
+      };
+      frameId = window.requestAnimationFrame(tickTimeUntil);
+      return () => window.cancelAnimationFrame(frameId);
+    }
+
     if (settings.mode === ClockMode.Interval) {
       lastFrameTimeRef.current = performance.now();
 
@@ -883,6 +1088,20 @@ export default function App() {
             isRunningRef.current = true;
             setIsRunning(true);
           }
+        } else if (currentMode === ClockMode.TimeUntil) {
+          const now = new Date();
+          const resolved = resolveNextTargetTimestampMs(
+            now,
+            settingsRef.current.timeUntilTarget
+          );
+          timeUntilEpochMsRef.current = resolved.targetTimestampMs;
+          timeUntilRemainingRef.current = Math.max(
+            0,
+            resolved.targetTimestampMs - now.getTime()
+          );
+          setIsTimeUntilTomorrow(resolved.isTomorrow);
+          isRunningRef.current = true;
+          setIsRunning(true);
         } else if (currentMode === ClockMode.Interval) {
           let activeInterval = intervalStateRef.current;
           if (
@@ -942,6 +1161,25 @@ export default function App() {
         countdownRemainingRef.current = countdownTargetToMs(
           currentSettings.countdownTarget
         );
+        syncDomDisplay(
+          currentSettings,
+          intervalStateRef.current,
+          focusStateRef.current
+        );
+      } else if (currentSettings.mode === ClockMode.TimeUntil) {
+        const now = new Date();
+        const resolved = resolveNextTargetTimestampMs(
+          now,
+          currentSettings.timeUntilTarget
+        );
+        timeUntilEpochMsRef.current = resolved.targetTimestampMs;
+        timeUntilRemainingRef.current = Math.max(
+          0,
+          resolved.targetTimestampMs - now.getTime()
+        );
+        setIsTimeUntilTomorrow(resolved.isTomorrow);
+        isRunningRef.current = true;
+        setIsRunning(true);
         syncDomDisplay(
           currentSettings,
           intervalStateRef.current,
@@ -1131,6 +1369,7 @@ export default function App() {
 
   // Settings Handlers
   const handleChangeMode = (mode: ClockMode) => {
+    unlockAudioContext();
     if (!isAlarmClockRingingRef.current) {
       stopAlarmSound();
     }
@@ -1143,6 +1382,21 @@ export default function App() {
       countdownRemainingRef.current = countdownTargetToMs(
         settings.countdownTarget
       );
+    } else if (mode === ClockMode.TimeUntil) {
+      const now = new Date();
+      const resolved = resolveNextTargetTimestampMs(
+        now,
+        settings.timeUntilTarget
+      );
+      timeUntilEpochMsRef.current = resolved.targetTimestampMs;
+      timeUntilRemainingRef.current = Math.max(
+        0,
+        resolved.targetTimestampMs - now.getTime()
+      );
+      setIsTimeUntilTomorrow(resolved.isTomorrow);
+      isRunningRef.current = true;
+      setIsRunning(true);
+      requestScreenWakeLock();
     } else if (mode === ClockMode.Interval) {
       const fresh = createInitialIntervalState(settings.intervalConfig);
       intervalStateRef.current = fresh;
@@ -1180,6 +1434,30 @@ export default function App() {
     if (!isRunningRef.current && settingsRef.current.mode === ClockMode.Countdown) {
       countdownRemainingRef.current = countdownTargetToMs(clean);
       setIsAlarmBlinking(false);
+    }
+  };
+
+  const handleChangeTimeUntilTarget = (rawTarget: TimeUntilTarget) => {
+    unlockAudioContext();
+    if (!isAlarmClockRingingRef.current) {
+      stopAlarmSound();
+    }
+    const clean = sanitizeTimeUntilTarget(rawTarget);
+    const now = new Date();
+    const resolved = resolveNextTargetTimestampMs(now, clean);
+    timeUntilEpochMsRef.current = resolved.targetTimestampMs;
+    timeUntilRemainingRef.current = Math.max(
+      0,
+      resolved.targetTimestampMs - now.getTime()
+    );
+    setIsTimeUntilTomorrow(resolved.isTomorrow);
+    setIsAlarmBlinking(false);
+    setBgFlashEvent(null);
+    setSettings((prev) => ({ ...prev, timeUntilTarget: clean }));
+    if (settingsRef.current.mode === ClockMode.TimeUntil) {
+      isRunningRef.current = true;
+      setIsRunning(true);
+      requestScreenWakeLock();
     }
   };
 
@@ -1414,12 +1692,15 @@ export default function App() {
   };
 
   const handleSavePreset = (
-    name: string
+    name: string,
+    category: PresetCategory
   ): { ok: true } | { ok: false; error: string } => {
     const result = createTimerPreset({
       name,
+      category,
       mode: settings.mode,
       countdownTarget: settings.countdownTarget,
+      timeUntilTarget: settings.timeUntilTarget,
       intervalConfig: settings.intervalConfig,
       focusConfig: settings.focusConfig,
       alarmClock: settings.alarmClock,
@@ -1451,6 +1732,24 @@ export default function App() {
         mode: ClockMode.Countdown,
         countdownTarget: cleanTarget,
       }));
+    } else if (preset.mode === ClockMode.TimeUntil && preset.timeUntilTarget) {
+      const cleanTarget = sanitizeTimeUntilTarget(preset.timeUntilTarget);
+      const now = new Date();
+      const resolved = resolveNextTargetTimestampMs(now, cleanTarget);
+      timeUntilEpochMsRef.current = resolved.targetTimestampMs;
+      timeUntilRemainingRef.current = Math.max(
+        0,
+        resolved.targetTimestampMs - now.getTime()
+      );
+      setIsTimeUntilTomorrow(resolved.isTomorrow);
+      isRunningRef.current = true;
+      setIsRunning(true);
+      setSettings((prev) => ({
+        ...prev,
+        mode: ClockMode.TimeUntil,
+        timeUntilTarget: cleanTarget,
+      }));
+      requestScreenWakeLock();
     } else if (preset.mode === ClockMode.Interval && preset.intervalConfig) {
       const cleanInterval = sanitizeIntervalConfig(preset.intervalConfig);
       const freshState = createInitialIntervalState(cleanInterval);
@@ -1594,6 +1893,10 @@ export default function App() {
         focusState={focusState}
         presets={presets}
         isAlarmSnoozed={snoozeUntilMs !== null}
+        isMidnightScheduledActive={scheduledTheme.isMidnightScheduledActive}
+        solarTimes={scheduledTheme.solar}
+        solarGeoStatus={solarGeoStatus}
+        solarGeoError={solarGeoError}
         onClose={() => setIsSettingsOpen(false)}
         onChangeMode={handleChangeMode}
         onChangeLiveClockTimezone={(liveClockTimezone) =>
@@ -1626,6 +1929,7 @@ export default function App() {
         }
         onToggleAutoDim={handleToggleAutoDim}
         onChangeCountdownTarget={handleChangeCountdownTarget}
+        onChangeTimeUntilTarget={handleChangeTimeUntilTarget}
         onChangeIntervalWork={handleChangeIntervalWork}
         onChangeIntervalRest={handleChangeIntervalRest}
         onChangeIntervalCycles={handleChangeIntervalCycles}
@@ -1669,6 +1973,8 @@ export default function App() {
         onApplyPreset={(clockColor, bgColor) =>
           setSettings((prev) => ({ ...prev, clockColor, bgColor }))
         }
+        onToggleSolarSchedule={handleToggleSolarSchedule}
+        onRefreshSolarLocation={() => requestBrowserGeolocation(true)}
       />
 
       <ClockFace
@@ -1684,6 +1990,8 @@ export default function App() {
         intervalState={intervalState}
         focusState={focusState}
         alarmClock={settings.alarmClock}
+        timeUntilTarget={settings.timeUntilTarget}
+        isTimeUntilTomorrow={isTimeUntilTomorrow}
         isAlarmBlinking={isAlarmBlinking}
         isAlarmClockRinging={isAlarmClockRinging}
         snoozeRemainingMs={snoozeRemainingMs}

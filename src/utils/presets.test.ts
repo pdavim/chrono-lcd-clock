@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { ClockMode, DEFAULT_SETTINGS } from './time';
 import {
   DEFAULT_TIMER_PRESETS,
+  PresetCategory,
   createTimerPreset,
   formatPresetSummary,
+  groupPresetsByCategory,
   isPresetMatchingSettings,
   sanitizePresetsList,
 } from './presets';
@@ -156,6 +158,69 @@ test('sanitizePresetsList preserves empty arrays and filters invalid records', (
     assert.equal(sanitizedFocus.length, 1);
     assert.equal(sanitizedFocus[0].mode, ClockMode.FocusSession);
   }
+
+  const timeUntilPresetRes = createTimerPreset({
+    id: 'tu1',
+    name: 'End of Workday',
+    mode: ClockMode.TimeUntil,
+    countdownTarget: DEFAULT_SETTINGS.countdownTarget,
+    timeUntilTarget: { hh: 17, mm: 30, ss: 15 },
+    intervalConfig: DEFAULT_SETTINGS.intervalConfig,
+  });
+  assert.equal(timeUntilPresetRes.ok, true);
+  if (timeUntilPresetRes.ok) {
+    assert.equal(
+      formatPresetSummary(timeUntilPresetRes.preset),
+      'Time Until · 17:30:15'
+    );
+    assert.equal(
+      isPresetMatchingSettings(timeUntilPresetRes.preset, {
+        ...DEFAULT_SETTINGS,
+        mode: ClockMode.TimeUntil,
+        timeUntilTarget: { hh: 17, mm: 30, ss: 15 },
+      }),
+      true
+    );
+    const sanitizedTu = sanitizePresetsList([timeUntilPresetRes.preset]);
+    assert.equal(sanitizedTu.length, 1);
+    assert.equal(sanitizedTu[0].mode, ClockMode.TimeUntil);
+  }
 });
+
+test('groupPresetsByCategory organizes presets into Work, Exercise, Meditation, and General groups', () => {
+  const allGroups = groupPresetsByCategory(DEFAULT_TIMER_PRESETS, 'all');
+  assert.deepEqual(
+    allGroups.map((g) => g.label),
+    ['Work', 'Exercise', 'Meditation']
+  );
+
+  const meditationOnly = groupPresetsByCategory(
+    DEFAULT_TIMER_PRESETS,
+    PresetCategory.Meditation
+  );
+  assert.equal(meditationOnly.length, 1);
+  assert.equal(meditationOnly[0].category, PresetCategory.Meditation);
+  assert.equal(meditationOnly[0].items[0].name, '5 Min Countdown');
+
+  const medPreset = createTimerPreset({
+    id: 'med-10',
+    name: '10m Body Scan',
+    category: PresetCategory.Meditation,
+    mode: ClockMode.Countdown,
+    countdownTarget: { hh: 0, mm: 10, ss: 0 },
+    intervalConfig: DEFAULT_SETTINGS.intervalConfig,
+  });
+  assert.equal(medPreset.ok, true);
+  if (medPreset.ok) {
+    assert.equal(medPreset.preset.category, PresetCategory.Meditation);
+    const updatedGroups = groupPresetsByCategory(
+      [...DEFAULT_TIMER_PRESETS, medPreset.preset],
+      PresetCategory.Meditation
+    );
+    assert.equal(updatedGroups[0].items.length, 2);
+  }
+});
+
+
 
 

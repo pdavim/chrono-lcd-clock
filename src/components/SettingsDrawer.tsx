@@ -5,12 +5,16 @@ import {
   BellOff,
   Calendar,
   Clock,
+  LocateFixed,
   Minus,
   Moon,
   Plus,
   Radio,
   RotateCcw,
   Smartphone,
+  Sun,
+  Sunrise,
+  Sunset,
   Trash2,
   TrendingUp,
   Volume2,
@@ -25,10 +29,16 @@ import {
   getActiveMediaLabel,
 } from '../utils/media';
 import {
+  PRESET_CATEGORY_OPTIONS,
+  PresetCategory,
+  PresetCategoryFilter,
   SavedTimerPreset,
   formatPresetSummary,
+  getPresetCategoryLabel,
+  groupPresetsByCategory,
   isPresetMatchingSettings,
 } from '../utils/presets';
+import { SolarTimesResult } from '../utils/solar';
 import {
   ALARM_SOUND_OPTIONS,
   AlarmSoundId,
@@ -41,9 +51,14 @@ import {
   FontOptionId,
   LiveClockTimezone,
   TimeFieldKey,
+  TimeUntilTarget,
   computeMsUntilAlarm,
+  computeMsUntilTargetTime,
   countActiveFields,
+  formatDurationMs,
   formatRemainingTimeBrief,
+  formatTimeUntilLabel,
+  resolveNextTargetTimestampMs,
 } from '../utils/time';
 import { RadioConnectorTab } from './RadioConnectorTab';
 
@@ -131,6 +146,10 @@ interface SettingsDrawerProps {
   focusState: FocusState;
   presets: readonly SavedTimerPreset[];
   isAlarmSnoozed: boolean;
+  isMidnightScheduledActive: boolean;
+  solarTimes: SolarTimesResult | null;
+  solarGeoStatus: 'idle' | 'locating' | 'ready' | 'error';
+  solarGeoError: string | null;
   onClose: () => void;
   onChangeMode: (mode: ClockMode) => void;
   onChangeLiveClockTimezone: (timezone: LiveClockTimezone) => void;
@@ -141,6 +160,7 @@ interface SettingsDrawerProps {
   onToggleShowBatteryLevel: () => void;
   onToggleAutoDim: () => void;
   onChangeCountdownTarget: (target: CountdownTarget) => void;
+  onChangeTimeUntilTarget: (target: TimeUntilTarget) => void;
   onChangeIntervalWork: (work: CountdownTarget) => void;
   onChangeIntervalRest: (rest: CountdownTarget) => void;
   onChangeIntervalCycles: (cycles: number) => void;
@@ -152,7 +172,10 @@ interface SettingsDrawerProps {
   onUpdateMedia: (patch: Partial<MediaConfig>) => void;
   onPlayMediaNow: () => void;
   onPauseMediaNow: () => void;
-  onSavePreset: (name: string) => { ok: true } | { ok: false; error: string };
+  onSavePreset: (
+    name: string,
+    category: PresetCategory
+  ) => { ok: true } | { ok: false; error: string };
   onSelectPreset: (preset: SavedTimerPreset) => void;
   onDeletePreset: (presetId: string) => void;
   onToggleAlarmSound: () => void;
@@ -171,6 +194,8 @@ interface SettingsDrawerProps {
   onChangeClockColor: (color: string) => void;
   onChangeBgColor: (color: string) => void;
   onApplyPreset: (clockColor: string, bgColor: string) => void;
+  onToggleSolarSchedule: () => void;
+  onRefreshSolarLocation: () => void;
 }
 
 const FIELD_ITEMS: readonly { key: TimeFieldKey; label: string }[] = [
@@ -194,6 +219,10 @@ export function SettingsDrawer({
   focusState,
   presets,
   isAlarmSnoozed,
+  isMidnightScheduledActive,
+  solarTimes,
+  solarGeoStatus,
+  solarGeoError,
   onClose,
   onChangeMode,
   onChangeLiveClockTimezone,
@@ -204,6 +233,7 @@ export function SettingsDrawer({
   onToggleShowBatteryLevel,
   onToggleAutoDim,
   onChangeCountdownTarget,
+  onChangeTimeUntilTarget,
   onChangeIntervalWork,
   onChangeIntervalRest,
   onChangeIntervalCycles,
@@ -234,10 +264,20 @@ export function SettingsDrawer({
   onChangeClockColor,
   onChangeBgColor,
   onApplyPreset,
+  onToggleSolarSchedule,
+  onRefreshSolarLocation,
 }: SettingsDrawerProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('timer');
   const [presetName, setPresetName] = useState<string>('');
+  const [presetCategoryFilter, setPresetCategoryFilter] =
+    useState<PresetCategoryFilter>('all');
+  const [newPresetCategory, setNewPresetCategory] = useState<PresetCategory>(
+    PresetCategory.Work
+  );
   const [presetError, setPresetError] = useState<string | null>(null);
+  const [livePreviewNowMs, setLivePreviewNowMs] = useState<number>(() =>
+    Date.now()
+  );
   const presetInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -246,22 +286,50 @@ export function SettingsDrawer({
     }
   }, [requestedTab]);
 
+  useEffect(() => {
+    if (
+      !isOpen ||
+      activeTab !== 'timer' ||
+      (settings.mode !== ClockMode.TimeUntil &&
+        settings.mode !== ClockMode.AlarmClock)
+    ) {
+      return undefined;
+    }
+    setLivePreviewNowMs(Date.now());
+    const id = window.setInterval(() => {
+      setLivePreviewNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [isOpen, activeTab, settings.mode]);
+
   if (!isOpen) return null;
 
+  const previewNowDate = new Date(livePreviewNowMs);
   const activeFieldCount = countActiveFields(settings.visibleFields);
   const canSaveCurrentMode =
     settings.mode === ClockMode.Countdown ||
+    settings.mode === ClockMode.TimeUntil ||
     settings.mode === ClockMode.Interval ||
     settings.mode === ClockMode.FocusSession ||
     settings.mode === ClockMode.AlarmClock;
 
   const nextAlarmBrief = formatRemainingTimeBrief(
-    computeMsUntilAlarm(new Date(), settings.alarmClock)
+    computeMsUntilAlarm(previewNowDate, settings.alarmClock)
   );
+  const timeUntilResolution = resolveNextTargetTimestampMs(
+    previewNowDate,
+    settings.timeUntilTarget
+  );
+  const timeUntilRemainingPreviewMs = computeMsUntilTargetTime(
+    previewNowDate,
+    settings.timeUntilTarget
+  );
+
+  const groupedPresets = groupPresetsByCategory(presets, presetCategoryFilter);
 
   const handleSavePresetSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const res = onSavePreset(presetName);
+    const res = onSavePreset(presetName, newPresetCategory);
     if (!res.ok) {
       setPresetError(res.error);
       presetInputRef.current?.focus();
@@ -286,7 +354,7 @@ export function SettingsDrawer({
         aria-modal="true"
         aria-labelledby="settings-modal-title"
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[86dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/12 bg-slate-950/96 text-slate-100 shadow-2xl backdrop-blur-xl sm:max-h-[82dvh] sm:max-w-lg sm:rounded-3xl"
+        className="flex max-h-[86dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/12 bg-slate-950 text-slate-100 shadow-2xl sm:max-h-[82dvh] sm:max-w-lg sm:rounded-3xl"
       >
         {/* Mobile Bottom-Sheet Grab Handle */}
         <div
@@ -373,6 +441,7 @@ export function SettingsDrawer({
                 >
                   <option value={ClockMode.Stopwatch}>Stopwatch</option>
                   <option value={ClockMode.Countdown}>Countdown</option>
+                  <option value={ClockMode.TimeUntil}>Time Until</option>
                   <option value={ClockMode.Interval}>Interval Training</option>
                   <option value={ClockMode.FocusSession}>Focus Session</option>
                   <option value={ClockMode.AlarmClock}>Alarm Clock</option>
@@ -402,6 +471,47 @@ export function SettingsDrawer({
                       onChangeCountdownTarget(target);
                     }}
                   />
+                </div>
+              )}
+
+              {/* Time Until (Future Target HH:MM:SS) Setup */}
+              {settings.mode === ClockMode.TimeUntil && (
+                <div className="flex flex-col gap-3 border-t border-white/8 pt-3.5">
+                  <DurationInputGroup
+                    label="Target Time"
+                    prefixId="tu"
+                    maxHours={23}
+                    value={settings.timeUntilTarget}
+                    onChange={(target) => {
+                      setPresetError(null);
+                      onChangeTimeUntilTarget(target);
+                    }}
+                  />
+                  <div
+                    data-testid="time-until-preview"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-800/90 bg-slate-900/70 px-3 py-2.5"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium text-slate-200 tabular-nums">
+                        {timeUntilResolution.isTomorrow ? 'Tomorrow' : 'Today'}{' '}
+                        at {formatTimeUntilLabel(settings.timeUntilTarget)}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Counts down live until target time
+                      </span>
+                    </div>
+                    <span
+                      data-testid="time-until-preview-countdown"
+                      className="font-mono text-xs font-semibold text-emerald-300 tabular-nums shrink-0"
+                    >
+                      {formatDurationMs(timeUntilRemainingPreviewMs, {
+                        hh: true,
+                        mm: true,
+                        ss: true,
+                        ms: false,
+                      })}
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -704,8 +814,8 @@ export function SettingsDrawer({
                 </div>
               )}
 
-              {/* Saved Presets Section */}
-              <div className="flex flex-col gap-2.5 border-t border-white/8 pt-4">
+              {/* Saved Presets Section (Grouped by Category) */}
+              <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-semibold text-slate-200">
                     Presets
@@ -715,67 +825,136 @@ export function SettingsDrawer({
                   </span>
                 </div>
 
-                {presets.length === 0 ? (
-                  <p className="py-1 text-xs text-slate-400">
-                    No saved presets yet.
+                {/* Category Filter Tabs */}
+                <div
+                  role="group"
+                  aria-label="Filter presets by category"
+                  className="grid grid-cols-3 sm:grid-cols-5 gap-1.5"
+                >
+                  <button
+                    type="button"
+                    id="preset-filter-all"
+                    aria-pressed={presetCategoryFilter === 'all'}
+                    onClick={() => setPresetCategoryFilter('all')}
+                    className={`h-9 rounded-lg border px-2 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                      presetCategoryFilter === 'all'
+                        ? 'border-emerald-400 bg-emerald-400 text-slate-950'
+                        : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-600 hover:text-white'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {PRESET_CATEGORY_OPTIONS.map((cat) => {
+                    const isSelected = presetCategoryFilter === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        id={`preset-filter-${cat.id}`}
+                        aria-pressed={isSelected}
+                        onClick={() => {
+                          setPresetCategoryFilter(cat.id);
+                          setNewPresetCategory(cat.id);
+                        }}
+                        className={`h-9 rounded-lg border px-2 text-xs font-semibold transition-colors whitespace-nowrap truncate cursor-pointer ${
+                          isSelected
+                            ? 'border-emerald-400 bg-emerald-400 text-slate-950'
+                            : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-600 hover:text-white'
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {groupedPresets.length === 0 ? (
+                  <p className="py-1.5 text-xs text-slate-400">
+                    {presetCategoryFilter === 'all'
+                      ? 'No saved presets yet.'
+                      : `No ${getPresetCategoryLabel(presetCategoryFilter)} presets saved yet.`}
                   </p>
                 ) : (
                   <div
-                    className="flex flex-col gap-1.5"
-                    role="list"
-                    aria-label="Saved timer presets"
+                    className="flex flex-col gap-3"
+                    aria-label="Saved timer presets by category"
                   >
-                    {presets.map((preset) => {
-                      const isActivePreset = isPresetMatchingSettings(
-                        preset,
-                        settings
-                      );
-                      return (
-                        <div
-                          key={preset.id}
-                          role="listitem"
-                          className="flex items-center gap-1.5"
-                        >
-                          <button
-                            type="button"
-                            aria-pressed={isActivePreset}
-                            onClick={() => {
-                              setPresetError(null);
-                              onSelectPreset(preset);
-                            }}
-                            className={`flex min-h-[44px] min-w-0 flex-1 flex-col items-start justify-center rounded-lg border px-3 py-1.5 text-left transition-colors cursor-pointer ${
-                              isActivePreset
-                                ? 'border-emerald-400/80 bg-emerald-400/15 text-emerald-100'
-                                : 'border-slate-800 bg-slate-900/80 text-slate-200 hover:border-slate-600 hover:bg-slate-900'
-                            }`}
-                          >
-                            <span className="w-full truncate text-xs font-semibold">
-                              {preset.name}
-                            </span>
-                            <span className="w-full truncate text-[11px] text-slate-400 tabular-nums">
-                              {formatPresetSummary(preset)}
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Delete preset '${preset.name}'`}
-                            onClick={() => onDeletePreset(preset.id)}
-                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-900/80 text-slate-400 hover:border-rose-500/50 hover:text-rose-300 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                          </button>
+                    {groupedPresets.map((group) => (
+                      <div
+                        key={group.category}
+                        data-testid={`preset-group-${group.category}`}
+                        className="flex flex-col gap-1.5"
+                      >
+                        <div className="flex items-center justify-between px-0.5">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            {group.label}
+                          </span>
+                          <span className="text-[11px] text-slate-500 tabular-nums">
+                            {group.items.length}
+                          </span>
                         </div>
-                      );
-                    })}
+                        <div
+                          className="flex flex-col gap-1.5"
+                          role="list"
+                          aria-label={`${group.label} presets`}
+                        >
+                          {group.items.map((preset) => {
+                            const isActivePreset = isPresetMatchingSettings(
+                              preset,
+                              settings
+                            );
+                            return (
+                              <div
+                                key={preset.id}
+                                role="listitem"
+                                className="flex items-center gap-1.5"
+                              >
+                                <button
+                                  type="button"
+                                  aria-pressed={isActivePreset}
+                                  onClick={() => {
+                                    setPresetError(null);
+                                    onSelectPreset(preset);
+                                  }}
+                                  className={`flex min-h-[44px] min-w-0 flex-1 flex-col items-start justify-center rounded-lg border px-3 py-1.5 text-left transition-colors cursor-pointer ${
+                                    isActivePreset
+                                      ? 'border-emerald-400/80 bg-emerald-400/15 text-emerald-100'
+                                      : 'border-slate-800 bg-slate-900/80 text-slate-200 hover:border-slate-600 hover:bg-slate-900'
+                                  }`}
+                                >
+                                  <span className="w-full truncate text-xs font-semibold">
+                                    {preset.name}
+                                  </span>
+                                  <span className="w-full truncate text-[11px] text-slate-400 tabular-nums">
+                                    {formatPresetSummary(preset)}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={`Delete preset '${preset.name}'`}
+                                  onClick={() => onDeletePreset(preset.id)}
+                                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-900/80 text-slate-400 hover:border-rose-500/50 hover:text-rose-300 transition-colors cursor-pointer"
+                                >
+                                  <Trash2
+                                    className="h-4 w-4"
+                                    aria-hidden="true"
+                                  />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
 
                 {canSaveCurrentMode ? (
                   <form
                     onSubmit={handleSavePresetSubmit}
-                    className="flex flex-col gap-1.5 pt-1"
+                    className="flex flex-col gap-2 pt-1"
                   >
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
                       <input
                         ref={presetInputRef}
                         id="preset-name-input"
@@ -790,12 +969,31 @@ export function SettingsDrawer({
                         }}
                         className="h-11 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus-visible:border-emerald-400 focus-visible:outline-none"
                       />
-                      <button
-                        type="submit"
-                        className="h-11 rounded-lg bg-emerald-400 px-4 text-xs font-semibold text-slate-950 hover:bg-emerald-300 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                      >
-                        Save
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <select
+                          id="preset-category-select"
+                          aria-label="Preset category"
+                          value={newPresetCategory}
+                          onChange={(e) =>
+                            setNewPresetCategory(
+                              e.target.value as PresetCategory
+                            )
+                          }
+                          className="h-11 flex-1 sm:w-32 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+                        >
+                          {PRESET_CATEGORY_OPTIONS.map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                              {cat.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="submit"
+                          className="h-11 rounded-lg bg-emerald-400 px-4 text-xs font-semibold text-slate-950 hover:bg-emerald-300 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        >
+                          Save
+                        </button>
+                      </div>
                     </div>
                     {presetError && (
                       <p role="alert" className="text-xs text-rose-400">
@@ -805,8 +1003,8 @@ export function SettingsDrawer({
                   </form>
                 ) : (
                   <p className="text-[11px] text-slate-400">
-                    Select Countdown, Interval, or Alarm Clock mode above to save
-                    a preset.
+                    Select Countdown, Time Until, Interval, Focus Session, or
+                    Alarm Clock mode above to save a preset.
                   </p>
                 )}
               </div>
@@ -1059,11 +1257,147 @@ export function SettingsDrawer({
                 </div>
               </div>
 
-              {/* Color Themes & Custom Pickers */}
+              {/* Color Themes, Solar Schedule & Custom Pickers */}
               <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
-                <h3 className="text-xs font-semibold text-slate-200">
-                  Color Themes
-                </h3>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium text-slate-200">
+                      Sunset / Sunrise Schedule
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Midnight theme at sunset, preferred theme at sunrise
+                    </span>
+                  </div>
+                  <button
+                    id="solar-schedule-switch"
+                    type="button"
+                    role="switch"
+                    aria-checked={settings.solarSchedule.enabled}
+                    aria-label="Sunset / Sunrise Schedule"
+                    onClick={onToggleSolarSchedule}
+                    className={`flex h-11 min-w-[86px] items-center justify-center gap-1.5 rounded-lg border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                      settings.solarSchedule.enabled
+                        ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
+                        : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {isMidnightScheduledActive ? (
+                      <Moon className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <Sun className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    <span>{settings.solarSchedule.enabled ? 'On' : 'Off'}</span>
+                  </button>
+                </div>
+
+                {(settings.solarSchedule.enabled || solarGeoError) && (
+                  <div
+                    data-testid="solar-schedule-card"
+                    className="flex flex-col gap-2.5 rounded-xl border border-slate-800/90 bg-slate-900/75 p-3"
+                  >
+                    {solarGeoStatus === 'locating' && (
+                      <p className="text-xs text-slate-300">
+                        Requesting browser geolocation to calculate local sunrise
+                        and sunset...
+                      </p>
+                    )}
+
+                    {solarGeoError && (
+                      <div className="flex items-center justify-between gap-2.5">
+                        <p role="alert" className="text-xs text-amber-300">
+                          {solarGeoError}
+                        </p>
+                        <button
+                          id="refresh-solar-location-btn"
+                          type="button"
+                          onClick={onRefreshSolarLocation}
+                          className="h-9 rounded-lg border border-slate-700 bg-slate-800 px-3 text-xs font-semibold text-slate-100 hover:bg-slate-700 whitespace-nowrap shrink-0 cursor-pointer"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+
+                    {settings.solarSchedule.coords && solarTimes && (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            data-testid="solar-active-phase"
+                            className="text-xs font-semibold text-slate-100"
+                          >
+                            {isMidnightScheduledActive
+                              ? 'Night Active · Midnight Theme'
+                              : 'Daytime Active · Preferred Theme'}
+                          </span>
+                          <button
+                            id="refresh-solar-location-btn"
+                            type="button"
+                            aria-label="Update geolocation"
+                            onClick={onRefreshSolarLocation}
+                            className="flex h-8 items-center gap-1 rounded-lg border border-slate-700/90 bg-slate-800/80 px-2.5 text-[11px] font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors shrink-0 cursor-pointer"
+                          >
+                            <LocateFixed
+                              className="h-3.5 w-3.5"
+                              aria-hidden="true"
+                            />
+                            <span>Update GPS</span>
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-2">
+                            <Sunrise
+                              className="h-4 w-4 text-amber-300 shrink-0"
+                              aria-hidden="true"
+                            />
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[11px] text-slate-400">
+                                Sunrise
+                              </span>
+                              <span
+                                data-testid="solar-sunrise-time"
+                                className="font-mono text-xs font-semibold text-slate-100 tabular-nums"
+                              >
+                                {solarTimes.sunriseLabel}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-2">
+                            <Sunset
+                              className="h-4 w-4 text-indigo-300 shrink-0"
+                              aria-hidden="true"
+                            />
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[11px] text-slate-400">
+                                Sunset
+                              </span>
+                              <span
+                                data-testid="solar-sunset-time"
+                                className="font-mono text-xs font-semibold text-slate-100 tabular-nums"
+                              >
+                                {solarTimes.sunsetLabel}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-1">
+                  <h3 className="text-xs font-semibold text-slate-200">
+                    {settings.solarSchedule.enabled
+                      ? 'Preferred Daytime Theme'
+                      : 'Color Themes'}
+                  </h3>
+                  {isMidnightScheduledActive && (
+                    <span className="text-[11px] text-amber-300">
+                      Midnight active until sunrise
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {COLOR_PRESETS.map((preset) => {
                     const isSelected =
