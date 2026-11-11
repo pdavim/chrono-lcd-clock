@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NODE_VERSION: "22.23.4"
     restart: unless-stopped
     # Dokploy routes HTTPS domain traffic via Traefik to internal port 3000.
     # In Dokploy Dashboard -> Domains -> Add Domain:
