@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import {
   Bell,
   BellOff,
+  Maximize,
+  Minimize,
   Pause,
   Play,
   RotateCcw,
@@ -15,6 +17,7 @@ import {
   shouldRenderBatteryIndicator,
   subscribeToBatteryStatus,
 } from '../utils/battery';
+import { isStandaloneDisplayMode } from '../utils/fullscreen';
 import { ClockMode } from '../utils/time';
 
 interface CornerControlsProps {
@@ -25,12 +28,14 @@ interface CornerControlsProps {
   isAlarmRinging: boolean;
   isAlarmSnoozed: boolean;
   isSettingsOpen: boolean;
+  isFullscreen: boolean;
   isUiHidden: boolean;
   isAutoDimmed: boolean;
   onToggleStartPause: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onReset: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onToggleAlarmArmed: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onCancelSnooze: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onToggleFullscreen: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onToggleSettings: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
@@ -44,14 +49,23 @@ export function CornerControls({
   isAlarmRinging,
   isAlarmSnoozed,
   isSettingsOpen,
+  isFullscreen,
   isUiHidden,
   isAutoDimmed,
   onToggleStartPause,
   onReset,
   onToggleAlarmArmed,
   onCancelSnooze,
+  onToggleFullscreen,
   onToggleSettings,
 }: CornerControlsProps) {
+  const [isBrowserContext] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return !isStandaloneDisplayMode(
+      window,
+      navigator as unknown as { standalone?: boolean }
+    );
+  });
   const [battery, setBattery] = useState<BatteryStatusSnapshot>(
     UNSUPPORTED_BATTERY_STATUS
   );
@@ -156,22 +170,44 @@ export function CornerControls({
         </div>
       )}
 
-      {/* Top-Right Discreet Settings Button */}
-      <button
-        type="button"
-        id="gear-btn"
-        aria-label={isSettingsOpen ? 'Close settings' : 'Open settings'}
-        aria-expanded={isSettingsOpen}
-        aria-controls="controls-panel"
-        onClick={onToggleSettings}
-        className={`${baseCornerBtn} top-5 right-6 ${
-          isSettingsOpen
-            ? 'opacity-90 bg-current/10'
-            : visibilityClass
-        }`}
-      >
-        <Settings className="h-7 w-7 stroke-[2]" aria-hidden="true" />
-      </button>
+      {/* Top-Right Discreet Full Screen & Settings Buttons */}
+      <div className="fixed top-5 right-6 z-20 flex items-center gap-1.5">
+        {isBrowserContext && (
+          <button
+            type="button"
+            id="fullscreen-btn"
+            aria-label={isFullscreen ? 'Exit full screen' : 'Enter full screen'}
+            aria-pressed={isFullscreen}
+            title={isFullscreen ? 'Exit full screen (Esc)' : 'Full screen'}
+            onClick={onToggleFullscreen}
+            className={`min-h-[48px] min-w-[48px] p-3.5 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150 hover:bg-current/10 active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current ${
+              isFullscreen && !isUiHidden
+                ? 'opacity-75 hover:opacity-100'
+                : visibilityClass
+            }`}
+          >
+            {isFullscreen ? (
+              <Minimize className="h-7 w-7 stroke-[2]" aria-hidden="true" />
+            ) : (
+              <Maximize className="h-7 w-7 stroke-[2]" aria-hidden="true" />
+            )}
+          </button>
+        )}
+
+        <button
+          type="button"
+          id="gear-btn"
+          aria-label={isSettingsOpen ? 'Close settings' : 'Open settings'}
+          aria-expanded={isSettingsOpen}
+          aria-controls="controls-panel"
+          onClick={onToggleSettings}
+          className={`min-h-[48px] min-w-[48px] p-3.5 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150 hover:bg-current/10 active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current ${
+            isSettingsOpen ? 'opacity-90 bg-current/10' : visibilityClass
+          }`}
+        >
+          <Settings className="h-7 w-7 stroke-[2]" aria-hidden="true" />
+        </button>
+      </div>
 
       {/* Bottom-Left Discreet Start / Pause Icon Button (Timer Modes) */}
       {isTimerMode && (

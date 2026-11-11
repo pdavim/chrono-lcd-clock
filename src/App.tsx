@@ -7,6 +7,14 @@ import {
 import { CornerControls } from './components/CornerControls';
 import { SettingsDrawer, SettingsTabId } from './components/SettingsDrawer';
 import {
+  FullscreenCapableDocument,
+  FullscreenCapableElement,
+  exitNativeFullscreen,
+  getNativeFullscreenElement,
+  isExitFullscreenRightSwipe,
+  requestNativeFullscreen,
+} from './utils/fullscreen';
+import {
   AlarmWakeMode,
   MediaConfig,
   sanitizeMediaConfig,
@@ -231,6 +239,7 @@ export default function App() {
     null
   );
   const [isUiHidden, setIsUiHidden] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isAlarmBlinking, setIsAlarmBlinking] = useState<boolean>(false);
   const [isAlarmClockRinging, setIsAlarmClockRinging] = useState<boolean>(false);
   const [snoozeUntilMs, setSnoozeUntilMs] = useState<number | null>(null);
@@ -273,6 +282,15 @@ export default function App() {
 
   const isSettingsOpenRef = useRef<boolean>(isSettingsOpen);
   isSettingsOpenRef.current = isSettingsOpen;
+  const isFullscreenRef = useRef<boolean>(isFullscreen);
+  isFullscreenRef.current = isFullscreen;
+  const nativeFullscreenActiveRef = useRef<boolean>(false);
+  const rightSwipeStartRef = useRef<{
+    x: number;
+    y: number;
+    startedAtMs: number;
+  } | null>(null);
+  const suppressNextClockClickRef = useRef<boolean>(false);
   const lastModalPaintMsRef = useRef<number>(0);
 
   const isAlarmClockRingingRef = useRef<boolean>(isAlarmClockRinging);
@@ -1314,7 +1332,75 @@ export default function App() {
     requestScreenWakeLock();
   }, []);
 
-  // Keyboard shortcuts (Space: Start/Pause or Arm/Stop Alarm, R: Reset, Escape: Close Settings / Stop Alarm)
+  const handleExitFullscreen = useCallback(() => {
+    nativeFullscreenActiveRef.current = false;
+    isFullscreenRef.current = false;
+    setIsFullscreen(false);
+    setIsUiHidden(false);
+    if (typeof document !== 'undefined') {
+      void exitNativeFullscreen(document as FullscreenCapableDocument);
+    }
+  }, []);
+
+  const handleEnterFullscreen = useCallback(() => {
+    clearPendingSingleTap();
+    unlockAudioContext();
+    setIsSettingsOpen(false);
+    isFullscreenRef.current = true;
+    setIsFullscreen(true);
+    setIsUiHidden(true);
+    requestScreenWakeLock();
+    if (typeof document !== 'undefined') {
+      void requestNativeFullscreen(
+        document.documentElement as FullscreenCapableElement
+      ).then((enteredNative) => {
+        nativeFullscreenActiveRef.current = enteredNative;
+      });
+    }
+  }, [clearPendingSingleTap]);
+
+  const handleToggleFullscreen = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      if (isFullscreenRef.current) {
+        handleExitFullscreen();
+      } else {
+        handleEnterFullscreen();
+      }
+    },
+    [handleEnterFullscreen, handleExitFullscreen]
+  );
+
+  // Keep state synced when browser exits native fullscreen (e.g. OS-handled Esc key)
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const onFullscreenChange = () => {
+      const fsEl = getNativeFullscreenElement(
+        document as FullscreenCapableDocument
+      );
+      if (fsEl) {
+        nativeFullscreenActiveRef.current = true;
+        isFullscreenRef.current = true;
+        setIsFullscreen(true);
+      } else if (nativeFullscreenActiveRef.current) {
+        nativeFullscreenActiveRef.current = false;
+        isFullscreenRef.current = false;
+        setIsFullscreen(false);
+        setIsUiHidden(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener(
+        'webkitfullscreenchange',
+        onFullscreenChange
+      );
+    };
+  }, []);
+
+  // Keyboard shortcuts (Space: Start/Pause or Arm/Stop Alarm, R: Reset, Escape: Exit Fullscreen / Close Settings / Stop Alarm)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -1327,6 +1413,9 @@ export default function App() {
       if (e.key === 'Escape') {
         if (isAlarmClockRingingRef.current) {
           handleStopRingingAlarm();
+        }
+        if (isFullscreenRef.current) {
+          handleExitFullscreen();
         }
         setIsSettingsOpen(false);
         return;
@@ -1365,6 +1454,7 @@ export default function App() {
     handleStopRingingAlarm,
     handleToggleAlarmClockArmed,
     handleCancelSnooze,
+    handleExitFullscreen,
   ]);
 
   // Settings Handlers
@@ -1792,7 +1882,48 @@ export default function App() {
     setPresets((prev) => prev.filter((item) => item.id !== presetId));
   };
 
+  const beginRightSwipeGesture = (clientX: number, clientY: number) => {
+    if (!isFullscreenRef.current || isSettingsOpenRef.current) {
+      rightSwipeStartRef.current = null;
+      return;
+    }
+    rightSwipeStartRef.current = {
+      x: clientX,
+      y: clientY,
+      startedAtMs: performance.now(),
+    };
+  };
+
+  const completeRightSwipeGesture = (clientX: number, clientY: number) => {
+    const start = rightSwipeStartRef.current;
+    rightSwipeStartRef.current = null;
+    if (!start || !isFullscreenRef.current || isSettingsOpenRef.current) {
+      return;
+    }
+    const matched = isExitFullscreenRightSwipe({
+      startX: start.x,
+      startY: start.y,
+      endX: clientX,
+      endY: clientY,
+      durationMs: Math.max(10, performance.now() - start.startedAtMs),
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
+    if (matched) {
+      clearPendingSingleTap();
+      suppressNextClockClickRef.current = true;
+      window.setTimeout(() => {
+        suppressNextClockClickRef.current = false;
+      }, 400);
+      handleExitFullscreen();
+    }
+  };
+
   const handleClockAreaClick = () => {
+    if (suppressNextClockClickRef.current) {
+      suppressNextClockClickRef.current = false;
+      return;
+    }
     if (isAlarmClockRingingRef.current) {
       handleStopRingingAlarm();
       return;
@@ -1855,7 +1986,42 @@ export default function App() {
   );
 
   return (
-    <div className="clock-canvas relative h-dvh w-screen overflow-hidden">
+    <div
+      data-testid="clock-canvas"
+      data-fullscreen={isFullscreen ? 'true' : 'false'}
+      onTouchStart={(e) => {
+        if (e.touches.length === 1) {
+          beginRightSwipeGesture(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }}
+      onTouchEnd={(e) => {
+        if (e.changedTouches.length > 0) {
+          completeRightSwipeGesture(
+            e.changedTouches[0].clientX,
+            e.changedTouches[0].clientY
+          );
+        }
+      }}
+      onTouchCancel={() => {
+        rightSwipeStartRef.current = null;
+      }}
+      onPointerDown={(e) => {
+        if (e.pointerType !== 'touch') {
+          beginRightSwipeGesture(e.clientX, e.clientY);
+        }
+      }}
+      onPointerUp={(e) => {
+        if (e.pointerType !== 'touch') {
+          completeRightSwipeGesture(e.clientX, e.clientY);
+        }
+      }}
+      onPointerCancel={() => {
+        rightSwipeStartRef.current = null;
+      }}
+      className={`clock-canvas relative h-dvh w-screen overflow-hidden ${
+        isFullscreen && !isSettingsOpen ? 'touch-none' : ''
+      }`}
+    >
       <CornerControls
         mode={settings.mode}
         showBatteryLevel={settings.showBatteryLevel}
@@ -1864,12 +2030,14 @@ export default function App() {
         isAlarmRinging={isAlarmClockRinging}
         isAlarmSnoozed={snoozeUntilMs !== null}
         isSettingsOpen={isSettingsOpen}
+        isFullscreen={isFullscreen}
         isUiHidden={isUiHidden}
         isAutoDimmed={isAutoDimmed}
         onToggleStartPause={handleToggleStartPause}
         onReset={handleReset}
         onToggleAlarmArmed={handleToggleAlarmClockArmed}
         onCancelSnooze={handleCancelSnooze}
+        onToggleFullscreen={handleToggleFullscreen}
         onToggleSettings={handleToggleSettings}
       />
 

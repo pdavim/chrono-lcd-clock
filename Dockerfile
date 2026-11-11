@@ -10,6 +10,7 @@ COPY .nvmrc package.json package-lock.json* ./
 RUN npm install --legacy-peer-deps --no-audit --no-fund
 
 COPY index.html metadata.json tsconfig.json vite.config.ts server.ts ./
+COPY public ./public
 COPY src ./src
 
 RUN npm run build && npm prune --omit=dev --legacy-peer-deps --no-audit --no-fund
