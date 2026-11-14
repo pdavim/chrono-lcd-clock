@@ -19,7 +19,12 @@ import {
   shouldRenderBatteryIndicator,
   subscribeToBatteryStatus,
 } from '../utils/battery';
-import { isStandaloneDisplayMode } from '../utils/fullscreen';
+import {
+  FullscreenCapableDocument,
+  FullscreenCapableElement,
+  isStandaloneDisplayMode,
+  shouldShowFullscreenButton,
+} from '../utils/fullscreen';
 import { formatCompactDuration } from '../utils/presets';
 import {
   ClockMode,
@@ -75,13 +80,26 @@ export function CornerControls({
   onToggleFullscreen,
   onToggleSettings,
 }: CornerControlsProps) {
-  const [isBrowserContext, setIsBrowserContext] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    return !isStandaloneDisplayMode(
-      window,
-      navigator as unknown as { standalone?: boolean }
-    );
-  });
+  const [canShowFullscreenBtn, setCanShowFullscreenBtn] = useState<boolean>(
+    () => {
+      if (typeof window === 'undefined') return true;
+      const isStandalone = isStandaloneDisplayMode(
+        window,
+        navigator as unknown as { standalone?: boolean }
+      );
+      return shouldShowFullscreenButton({
+        isStandalone,
+        doc:
+          typeof document !== 'undefined'
+            ? (document as FullscreenCapableDocument)
+            : null,
+        el:
+          typeof document !== 'undefined'
+            ? (document.documentElement as FullscreenCapableElement)
+            : null,
+      });
+    }
+  );
   const [battery, setBattery] = useState<BatteryStatusSnapshot>(
     UNSUPPORTED_BATTERY_STATUS
   );
@@ -90,16 +108,26 @@ export function CornerControls({
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const syncDisplayContext = () => {
-      setIsBrowserContext(
-        !isStandaloneDisplayMode(
-          window,
-          navigator as unknown as { standalone?: boolean }
-        )
+      const isStandalone = isStandaloneDisplayMode(
+        window,
+        navigator as unknown as { standalone?: boolean }
+      );
+      setCanShowFullscreenBtn(
+        shouldShowFullscreenButton({
+          isStandalone,
+          doc: document as FullscreenCapableDocument,
+          el: document.documentElement as FullscreenCapableElement,
+        })
       );
     };
-    const mql = window.matchMedia('(display-mode: standalone)');
-    mql.addEventListener?.('change', syncDisplayContext);
-    return () => mql.removeEventListener?.('change', syncDisplayContext);
+    const standaloneMql = window.matchMedia('(display-mode: standalone)');
+    const fullscreenMql = window.matchMedia('(display-mode: fullscreen)');
+    standaloneMql.addEventListener?.('change', syncDisplayContext);
+    fullscreenMql.addEventListener?.('change', syncDisplayContext);
+    return () => {
+      standaloneMql.removeEventListener?.('change', syncDisplayContext);
+      fullscreenMql.removeEventListener?.('change', syncDisplayContext);
+    };
   }, []);
 
   useEffect(() => {
@@ -243,7 +271,7 @@ export function CornerControls({
       <div className="fixed safe-top-offset safe-right-offset z-20 flex items-center gap-1.5">
         <PWAInstallButton variant="corner" visibilityClass={visibilityClass} />
 
-        {isBrowserContext && (
+        {canShowFullscreenBtn && (
           <button
             type="button"
             id="fullscreen-btn"

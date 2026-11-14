@@ -180,6 +180,7 @@ export interface ClockSettings {
   showRadioControl: boolean;
   showJujitsuQuickStart: boolean;
   showBatteryLevel: boolean;
+  autoFullscreenWebApp: boolean;
   autoDimEnabled: boolean;
   countdownTarget: CountdownTarget;
   timeUntilTarget: TimeUntilTarget;
@@ -322,6 +323,7 @@ export const DEFAULT_SETTINGS: ClockSettings = {
   showRadioControl: true,
   showJujitsuQuickStart: true,
   showBatteryLevel: true,
+  autoFullscreenWebApp: true,
   autoDimEnabled: false,
   countdownTarget: {
     hh: 0,
@@ -1312,4 +1314,70 @@ export function stepJujitsuState(
 
   return { nextState: current, events };
 }
+
+export interface SettingsThemeVars {
+  accentColor: string;
+  accentFg: string;
+  surfaceBg: string;
+}
+
+function parseHexChannelPair(hex: string): [number, number, number] | null {
+  const trimmed = hex.trim().replace(/^#/, '');
+  if (/^[0-9a-fA-F]{3}$/.test(trimmed)) {
+    const r = parseInt(trimmed[0] + trimmed[0], 16);
+    const g = parseInt(trimmed[1] + trimmed[1], 16);
+    const b = parseInt(trimmed[2] + trimmed[2], 16);
+    return [r, g, b];
+  }
+  if (/^[0-9a-fA-F]{6}$/.test(trimmed)) {
+    const r = parseInt(trimmed.slice(0, 2), 16);
+    const g = parseInt(trimmed.slice(2, 4), 16);
+    const b = parseInt(trimmed.slice(4, 6), 16);
+    return [r, g, b];
+  }
+  return null;
+}
+
+function computeRelativeLuminance(hex: string): number | null {
+  const rgb = parseHexChannelPair(hex);
+  if (!rgb) return null;
+  const toLinear = (channel: number): number => {
+    const s = channel / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const [r, g, b] = rgb;
+  return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+}
+
+/**
+ * Resolves accessible accent, foreground ink, and modal surface CSS variables
+ * so Settings controls and scrollbars match the active clock color schema.
+ */
+export function resolveSettingsThemeVars(
+  clockColor: string,
+  bgColor: string
+): SettingsThemeVars {
+  const clockLum = computeRelativeLuminance(clockColor);
+  const bgLum = computeRelativeLuminance(bgColor);
+
+  let accentColor = '#38ff9c';
+  if (clockLum !== null && clockLum >= 0.14) {
+    accentColor = clockColor;
+  } else if (bgLum !== null && bgLum >= 0.14) {
+    accentColor = bgColor;
+  }
+
+  const accentLum = computeRelativeLuminance(accentColor) ?? 0.65;
+  const accentFg = accentLum > 0.34 ? '#060a0e' : '#ffffff';
+
+  const surfaceBg =
+    bgLum !== null && bgLum <= 0.12 ? bgColor : '#0b0f12';
+
+  return {
+    accentColor,
+    accentFg,
+    surfaceBg,
+  };
+}
+
 

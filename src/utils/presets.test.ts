@@ -3,9 +3,13 @@ import assert from 'node:assert/strict';
 import { ClockMode, DEFAULT_SETTINGS, JujitsuSoundId } from './time';
 import {
   DEFAULT_TIMER_PRESETS,
+  PRESET_MODE_OPTIONS,
   PresetCategory,
   createTimerPreset,
+  filterPresetsByMode,
+  formatPresetCardDisplay,
   formatPresetSummary,
+  getOrderedPresetModes,
   groupPresetsByCategory,
   isPresetMatchingSettings,
   sanitizePresetsList,
@@ -217,7 +221,7 @@ test('groupPresetsByCategory organizes presets into Work, Exercise, Meditation, 
       [...DEFAULT_TIMER_PRESETS, medPreset.preset],
       PresetCategory.Meditation
     );
-    assert.equal(updatedGroups[0].items.length, 2);
+    assert.equal(updatedGroups[0].items.some((item) => item.name === '10m Body Scan'), true);
   }
 });
 
@@ -265,6 +269,36 @@ test('createTimerPreset saves, matches, and sanitizes Jujitsu combat presets', (
     assert.equal(sanitized[0].mode, ClockMode.Jujitsu);
   }
 });
+
+test('getOrderedPresetModes places active user timer mode first and filters gallery presets per mode', () => {
+  // Active Jujitsu -> Jujitsu is index 0
+  const jujitsuOrder = getOrderedPresetModes(ClockMode.Jujitsu);
+  assert.equal(jujitsuOrder[0], ClockMode.Jujitsu);
+  assert.equal(jujitsuOrder.length, PRESET_MODE_OPTIONS.length);
+
+  // Active FocusSession -> FocusSession is index 0
+  const focusOrder = getOrderedPresetModes(ClockMode.FocusSession);
+  assert.equal(focusOrder[0], ClockMode.FocusSession);
+  assert.equal(focusOrder.length, PRESET_MODE_OPTIONS.length);
+
+  // Active AlarmClock -> AlarmClock is index 0
+  const alarmOrder = getOrderedPresetModes(ClockMode.AlarmClock);
+  assert.equal(alarmOrder[0], ClockMode.AlarmClock);
+
+  // Non-preset modes (Stopwatch / LiveClock) default first tab to Countdown
+  assert.equal(getOrderedPresetModes(ClockMode.Stopwatch)[0], ClockMode.Countdown);
+  assert.equal(getOrderedPresetModes(ClockMode.LiveClock)[0], ClockMode.Countdown);
+
+  // Every preset mode has seed presets for gallery display
+  for (const opt of PRESET_MODE_OPTIONS) {
+    const modePresets = filterPresetsByMode(DEFAULT_TIMER_PRESETS, opt.mode);
+    assert.equal(modePresets.length >= 2, true);
+    const card = formatPresetCardDisplay(modePresets[0]);
+    assert.equal(card.primaryDigits.length >= 4, true);
+    assert.equal(card.secondarySpec.length > 0, true);
+  }
+});
+
 
 
 

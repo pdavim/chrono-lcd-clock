@@ -39,17 +39,34 @@ export const PRESET_CATEGORY_OPTIONS: readonly {
   { id: PresetCategory.General, label: 'General' },
 ];
 
+export type PresetClockMode =
+  | ClockMode.Countdown
+  | ClockMode.TimeUntil
+  | ClockMode.Interval
+  | ClockMode.Jujitsu
+  | ClockMode.FocusSession
+  | ClockMode.AlarmClock;
+
+export interface PresetModeOption {
+  mode: PresetClockMode;
+  label: string;
+  shortLabel: string;
+}
+
+export const PRESET_MODE_OPTIONS: readonly PresetModeOption[] = [
+  { mode: ClockMode.Countdown, label: 'Countdown', shortLabel: 'Countdown' },
+  { mode: ClockMode.Jujitsu, label: 'Jujitsu', shortLabel: 'Jujitsu' },
+  { mode: ClockMode.Interval, label: 'Interval', shortLabel: 'Interval' },
+  { mode: ClockMode.FocusSession, label: 'Focus Session', shortLabel: 'Focus' },
+  { mode: ClockMode.TimeUntil, label: 'Time Until', shortLabel: 'Time Until' },
+  { mode: ClockMode.AlarmClock, label: 'Alarm Clock', shortLabel: 'Alarm' },
+];
+
 export interface SavedTimerPreset {
   id: string;
   name: string;
   category: PresetCategory;
-  mode:
-    | ClockMode.Countdown
-    | ClockMode.TimeUntil
-    | ClockMode.Interval
-    | ClockMode.Jujitsu
-    | ClockMode.FocusSession
-    | ClockMode.AlarmClock;
+  mode: PresetClockMode;
   countdownTarget?: CountdownTarget;
   timeUntilTarget?: TimeUntilTarget;
   intervalConfig?: IntervalConfig;
@@ -95,13 +112,189 @@ export const DEFAULT_TIMER_PRESETS: readonly SavedTimerPreset[] = [
     },
   },
   {
+    id: 'preset-jujitsu-kumite',
+    name: 'Kumite 3m/1m (15m)',
+    category: PresetCategory.Exercise,
+    mode: ClockMode.Jujitsu,
+    jujitsuConfig: {
+      countdown: { hh: 0, mm: 3, ss: 0 },
+      cooldown: { hh: 0, mm: 1, ss: 0 },
+      totalDuration: { hh: 0, mm: 15, ss: 0 },
+      startSoundId: JujitsuSoundId.TatamiGong,
+      stopSoundId: JujitsuSoundId.MatHorn,
+    },
+  },
+  {
     id: 'preset-5m',
     name: '5 Min Countdown',
     category: PresetCategory.Meditation,
     mode: ClockMode.Countdown,
     countdownTarget: { hh: 0, mm: 5, ss: 0 },
   },
+  {
+    id: 'preset-15m-meditation',
+    name: '15 Min Breathwork',
+    category: PresetCategory.Meditation,
+    mode: ClockMode.Countdown,
+    countdownTarget: { hh: 0, mm: 15, ss: 0 },
+  },
+  {
+    id: 'preset-focus-deep',
+    name: 'Deep Focus 25/5',
+    category: PresetCategory.Work,
+    mode: ClockMode.FocusSession,
+    focusConfig: {
+      work: { hh: 0, mm: 25, ss: 0 },
+      breakDuration: { hh: 0, mm: 5, ss: 0 },
+      sessions: 4,
+    },
+  },
+  {
+    id: 'preset-focus-sprint',
+    name: 'Studio Sprint 50/10',
+    category: PresetCategory.Work,
+    mode: ClockMode.FocusSession,
+    focusConfig: {
+      work: { hh: 0, mm: 50, ss: 0 },
+      breakDuration: { hh: 0, mm: 10, ss: 0 },
+      sessions: 2,
+    },
+  },
+  {
+    id: 'preset-timeuntil-wrap',
+    name: '17:00 Wrap-Up',
+    category: PresetCategory.Work,
+    mode: ClockMode.TimeUntil,
+    timeUntilTarget: { hh: 17, mm: 0, ss: 0 },
+  },
+  {
+    id: 'preset-timeuntil-noon',
+    name: '12:00 Midday Sync',
+    category: PresetCategory.Work,
+    mode: ClockMode.TimeUntil,
+    timeUntilTarget: { hh: 12, mm: 0, ss: 0 },
+  },
+  {
+    id: 'preset-alarm-morning',
+    name: '07:00 Morning Wake',
+    category: PresetCategory.Exercise,
+    mode: ClockMode.AlarmClock,
+    alarmTime: { hh: 7, mm: 0, ss: 0 },
+  },
+  {
+    id: 'preset-alarm-early',
+    name: '06:15 Mat Session',
+    category: PresetCategory.Exercise,
+    mode: ClockMode.AlarmClock,
+    alarmTime: { hh: 6, mm: 15, ss: 0 },
+  },
 ];
+
+export function isPresetClockMode(mode: ClockMode): mode is PresetClockMode {
+  return PRESET_MODE_OPTIONS.some((opt) => opt.mode === mode);
+}
+
+/**
+ * Returns all preset-capable timer modes with the user's currently active mode
+ * placed first (index 0). Falls back to Countdown first if active mode does not
+ * use saved presets (e.g., Stopwatch or LiveClock).
+ */
+export function getOrderedPresetModes(
+  activeMode: ClockMode
+): PresetClockMode[] {
+  const baseModes = PRESET_MODE_OPTIONS.map((opt) => opt.mode);
+  const prioritized: PresetClockMode = isPresetClockMode(activeMode)
+    ? activeMode
+    : ClockMode.Countdown;
+
+  return [
+    prioritized,
+    ...baseModes.filter((candidate) => candidate !== prioritized),
+  ];
+}
+
+export function getPresetModeOption(mode: PresetClockMode): PresetModeOption {
+  return (
+    PRESET_MODE_OPTIONS.find((opt) => opt.mode === mode) ??
+    PRESET_MODE_OPTIONS[0]
+  );
+}
+
+export function filterPresetsByMode(
+  presets: readonly SavedTimerPreset[],
+  mode: PresetClockMode
+): SavedTimerPreset[] {
+  return presets.filter((preset) => preset.mode === mode);
+}
+
+export interface PresetCardDisplay {
+  primaryDigits: string;
+  secondarySpec: string;
+  categoryLabel: string;
+}
+
+export function formatPresetCardDisplay(
+  preset: SavedTimerPreset
+): PresetCardDisplay {
+  const categoryLabel = getPresetCategoryLabel(preset.category);
+
+  if (preset.mode === ClockMode.Countdown && preset.countdownTarget) {
+    return {
+      primaryDigits: formatCompactDuration(preset.countdownTarget),
+      secondarySpec: 'Single countdown',
+      categoryLabel,
+    };
+  }
+  if (preset.mode === ClockMode.TimeUntil && preset.timeUntilTarget) {
+    const clean = sanitizeTimeUntilTarget(preset.timeUntilTarget);
+    const primary =
+      clean.ss > 0
+        ? formatTimeUntilLabel(clean)
+        : `${padDigits(clean.hh)}:${padDigits(clean.mm)}`;
+    return {
+      primaryDigits: primary,
+      secondarySpec: 'Target clock',
+      categoryLabel,
+    };
+  }
+  if (preset.mode === ClockMode.Interval && preset.intervalConfig) {
+    const { work, rest, cycles } = preset.intervalConfig;
+    return {
+      primaryDigits: formatCompactDuration(work),
+      secondarySpec: `Rest ${formatCompactDuration(rest)} · ${cycles}x`,
+      categoryLabel,
+    };
+  }
+  if (preset.mode === ClockMode.Jujitsu && preset.jujitsuConfig) {
+    const { countdown, cooldown, totalDuration } = preset.jujitsuConfig;
+    return {
+      primaryDigits: formatCompactDuration(countdown),
+      secondarySpec: `Rest ${formatCompactDuration(cooldown)} · ${formatCompactDuration(totalDuration)}`,
+      categoryLabel,
+    };
+  }
+  if (preset.mode === ClockMode.FocusSession && preset.focusConfig) {
+    const { work, breakDuration, sessions } = preset.focusConfig;
+    return {
+      primaryDigits: formatCompactDuration(work),
+      secondarySpec: `Break ${formatCompactDuration(breakDuration)} · ${sessions}x`,
+      categoryLabel,
+    };
+  }
+  if (preset.mode === ClockMode.AlarmClock && preset.alarmTime) {
+    return {
+      primaryDigits: formatAlarmTimeLabel(preset.alarmTime),
+      secondarySpec: 'Daily wake alarm',
+      categoryLabel,
+    };
+  }
+
+  return {
+    primaryDigits: '00:00',
+    secondarySpec: 'Saved preset',
+    categoryLabel,
+  };
+}
 
 export function getPresetCategoryLabel(category: PresetCategory): string {
   return (

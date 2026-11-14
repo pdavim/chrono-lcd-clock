@@ -4,6 +4,7 @@ export interface FullscreenCapableElement extends HTMLElement {
 
 export interface FullscreenCapableDocument extends Document {
   webkitFullscreenElement?: Element | null;
+  webkitFullscreenEnabled?: boolean;
   webkitExitFullscreen?: () => Promise<void> | void;
 }
 
@@ -19,14 +20,17 @@ export interface RightSideUpwardSwipeInput {
 
 export function isStandaloneDisplayMode(
   win?: Pick<Window, 'matchMedia'> | null,
-  nav?: { standalone?: boolean } | null
+  nav?: (Navigator & { standalone?: boolean }) | { standalone?: boolean } | null
 ): boolean {
-  if (nav && nav.standalone === true) {
+  if (nav && 'standalone' in nav && nav.standalone === true) {
     return true;
   }
   if (win && typeof win.matchMedia === 'function') {
     try {
-      if (win.matchMedia('(display-mode: standalone)').matches) {
+      if (
+        win.matchMedia('(display-mode: standalone)').matches ||
+        win.matchMedia('(display-mode: fullscreen)').matches
+      ) {
         return true;
       }
     } catch {
@@ -34,6 +38,40 @@ export function isStandaloneDisplayMode(
     }
   }
   return false;
+}
+
+export function canRequestNativeFullscreen(
+  doc?: Partial<FullscreenCapableDocument> | null,
+  el?: Partial<FullscreenCapableElement> | null
+): boolean {
+  if (!doc && !el) return false;
+  if (doc?.fullscreenEnabled === false && doc?.webkitFullscreenEnabled !== true) {
+    return false;
+  }
+  if (doc?.fullscreenEnabled === true || doc?.webkitFullscreenEnabled === true) {
+    return true;
+  }
+  return (
+    typeof el?.requestFullscreen === 'function' ||
+    typeof el?.webkitRequestFullscreen === 'function'
+  );
+}
+
+/**
+ * Determines whether to show the corner Full Screen button:
+ * - Always shown in standard browser tabs (uses native Fullscreen API + chromeless UI fallback)
+ * - Shown in standalone Home Screen WebApps when the OS supports Element Fullscreen
+ *   (e.g. iPadOS 16.4+, Android, Desktop PWAs) so users can hide the top system status bar.
+ */
+export function shouldShowFullscreenButton(params: {
+  isStandalone: boolean;
+  doc?: Partial<FullscreenCapableDocument> | null;
+  el?: Partial<FullscreenCapableElement> | null;
+}): boolean {
+  if (!params.isStandalone) {
+    return true;
+  }
+  return canRequestNativeFullscreen(params.doc, params.el);
 }
 
 export function getNativeFullscreenElement(

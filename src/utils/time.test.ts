@@ -34,6 +34,7 @@ import {
   formatSessionElapsedHhMmSs,
   formatTimeUntilLabel,
   resolveNextTargetTimestampMs,
+  resolveSettingsThemeVars,
   sanitizeAlarmClockConfig,
   sanitizeCountdownTarget,
   sanitizeFocusConfig,
@@ -818,6 +819,35 @@ test('shouldShowJujitsuQuickStart respects showJujitsuQuickStart toggle and hide
     false
   );
 });
+
+test('resolveSettingsThemeVars adapts Settings accent and scrollbar colors to every clock theme', () => {
+  assert.equal(DEFAULT_SETTINGS.autoFullscreenWebApp, true);
+
+  // Timex Indiglo (#38ff9c on #0b0f12)
+  const indiglo = resolveSettingsThemeVars('#38ff9c', '#0b0f12');
+  assert.equal(indiglo.accentColor, '#38ff9c');
+  assert.equal(indiglo.accentFg, '#060a0e');
+  assert.equal(indiglo.surfaceBg, '#0b0f12');
+
+  // Midnight (#ffb400 on #050a14)
+  const midnight = resolveSettingsThemeVars('#ffb400', '#050a14');
+  assert.equal(midnight.accentColor, '#ffb400');
+  assert.equal(midnight.accentFg, '#060a0e');
+  assert.equal(midnight.surfaceBg, '#050a14');
+
+  // Reflective LCD (#1a2118 dark digits on #9dad8b sage LCD canvas) -> uses #9dad8b accent on dark surface
+  const reflective = resolveSettingsThemeVars('#1a2118', '#9dad8b');
+  assert.equal(reflective.accentColor, '#9dad8b');
+  assert.equal(reflective.accentFg, '#060a0e');
+  assert.equal(reflective.surfaceBg, '#0b0f12');
+
+  // Red LED (#ff4242 on #100809) -> uses white foreground ink on #ff4242 solid buttons
+  const redLed = resolveSettingsThemeVars('#ff4242', '#100809');
+  assert.equal(redLed.accentColor, '#ff4242');
+  assert.equal(redLed.accentFg, '#ffffff');
+  assert.equal(redLed.surfaceBg, '#100809');
+});
+
 
 
 

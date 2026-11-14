@@ -9,9 +9,11 @@ import { SettingsDrawer, SettingsTabId } from './components/SettingsDrawer';
 import {
   FullscreenCapableDocument,
   FullscreenCapableElement,
+  canRequestNativeFullscreen,
   exitNativeFullscreen,
   getNativeFullscreenElement,
   isExitFullscreenRightSwipe,
+  isStandaloneDisplayMode,
   requestNativeFullscreen,
 } from './utils/fullscreen';
 import {
@@ -22,6 +24,7 @@ import {
 import {
   DEFAULT_TIMER_PRESETS,
   PresetCategory,
+  PresetClockMode,
   SavedTimerPreset,
   createTimerPreset,
   sanitizePresetsList,
@@ -78,6 +81,7 @@ import {
   getFontDefinition,
   isTimerClockMode,
   resolveNextTargetTimestampMs,
+  resolveSettingsThemeVars,
   sanitizeAlarmClockConfig,
   sanitizeCountdownTarget,
   sanitizeFocusConfig,
@@ -161,6 +165,10 @@ function loadSavedSettings(): ClockSettings {
         typeof parsed.autoDimEnabled === 'boolean'
           ? parsed.autoDimEnabled
           : DEFAULT_SETTINGS.autoDimEnabled,
+      autoFullscreenWebApp:
+        typeof parsed.autoFullscreenWebApp === 'boolean'
+          ? parsed.autoFullscreenWebApp
+          : DEFAULT_SETTINGS.autoFullscreenWebApp,
       countdownTarget: sanitizeCountdownTarget(
         parsed.countdownTarget ?? DEFAULT_SETTINGS.countdownTarget
       ),
@@ -539,14 +547,27 @@ export default function App() {
   useEffect(() => {
     const root = document.documentElement;
     const fontDef = getFontDefinition(settings.fontId);
-    const widthEm = estimateDisplayWidthEm(settings.visibleFields, settings.fontId);
+    const widthEm = estimateDisplayWidthEm(
+      settings.visibleFields,
+      settings.fontId
+    );
+    const settingsTheme = resolveSettingsThemeVars(
+      scheduledTheme.activeClockColor,
+      scheduledTheme.activeBgColor
+    );
 
     root.style.setProperty('--clock-color', scheduledTheme.activeClockColor);
     root.style.setProperty('--clock-bg', scheduledTheme.activeBgColor);
     root.style.setProperty('--clock-font', fontDef.family);
-    root.style.setProperty('--clock-font-style', fontDef.italic ? 'italic' : 'normal');
+    root.style.setProperty(
+      '--clock-font-style',
+      fontDef.italic ? 'italic' : 'normal'
+    );
     root.style.setProperty('--clock-size-vw', String(settings.clockSizeVw));
     root.style.setProperty('--clock-width-em', String(widthEm));
+    root.style.setProperty('--settings-accent', settingsTheme.accentColor);
+    root.style.setProperty('--settings-accent-fg', settingsTheme.accentFg);
+    root.style.setProperty('--settings-surface', settingsTheme.surfaceBg);
 
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (themeMeta) {
@@ -1263,9 +1284,38 @@ export default function App() {
     return undefined;
   }, [isRunning, settings.mode]);
 
+  const maybeEnterStandaloneNativeFullscreen = useCallback(() => {
+    if (
+      typeof window === 'undefined' ||
+      typeof document === 'undefined' ||
+      !settingsRef.current.autoFullscreenWebApp
+    ) {
+      return;
+    }
+    if (!isStandaloneDisplayMode(window, window.navigator)) {
+      return;
+    }
+    const fsDoc = document as FullscreenCapableDocument;
+    const fsEl = document.documentElement as FullscreenCapableElement;
+    if (getNativeFullscreenElement(fsDoc)) {
+      return;
+    }
+    if (!canRequestNativeFullscreen(fsDoc, fsEl)) {
+      return;
+    }
+    void requestNativeFullscreen(fsEl).then((entered) => {
+      if (entered) {
+        nativeFullscreenActiveRef.current = true;
+        isFullscreenRef.current = true;
+        setIsFullscreen(true);
+      }
+    });
+  }, []);
+
   const handleToggleStartPause = useCallback(
     (e?: React.MouseEvent<HTMLButtonElement>) => {
       e?.stopPropagation();
+      maybeEnterStandaloneNativeFullscreen();
       unlockAudioContext();
       stopAlarmSound();
       setIsAlarmBlinking(false);
@@ -1376,7 +1426,7 @@ export default function App() {
         }
       }
     },
-    []
+    [maybeEnterStandaloneNativeFullscreen]
   );
 
   const handleReset = useCallback(
@@ -1462,6 +1512,7 @@ export default function App() {
   const handleQuickStartJujitsu = useCallback(
     (e?: React.MouseEvent<HTMLButtonElement>) => {
       e?.stopPropagation();
+      maybeEnterStandaloneNativeFullscreen();
       clearPendingSingleTap();
       unlockAudioContext();
       stopAlarmSound();
@@ -1517,7 +1568,12 @@ export default function App() {
       );
       requestScreenWakeLock();
     },
-    [clearPendingSingleTap, issueMediaCommand, syncDomDisplay]
+    [
+      clearPendingSingleTap,
+      issueMediaCommand,
+      maybeEnterStandaloneNativeFullscreen,
+      syncDomDisplay,
+    ]
   );
 
   const handleStopRingingAlarm = useCallback(
@@ -2170,12 +2226,13 @@ export default function App() {
 
   const handleSavePreset = (
     name: string,
-    category: PresetCategory
+    category: PresetCategory,
+    targetMode: PresetClockMode | ClockMode = settings.mode
   ): { ok: true } | { ok: false; error: string } => {
     const result = createTimerPreset({
       name,
       category,
-      mode: settings.mode,
+      mode: targetMode,
       countdownTarget: settings.countdownTarget,
       timeUntilTarget: settings.timeUntilTarget,
       intervalConfig: settings.intervalConfig,
@@ -2322,6 +2379,7 @@ export default function App() {
       suppressNextClockClickRef.current = false;
       return;
     }
+    maybeEnterStandaloneNativeFullscreen();
     unlockAudioContext();
     if (isAlarmClockRingingRef.current) {
       handleStopRingingAlarm();
@@ -2485,6 +2543,7 @@ export default function App() {
         settings={settings}
         focusState={focusState}
         presets={presets}
+        isFullscreen={isFullscreen}
         isAlarmSnoozed={snoozeUntilMs !== null}
         isMidnightScheduledActive={scheduledTheme.isMidnightScheduledActive}
         solarTimes={scheduledTheme.solar}
@@ -2527,6 +2586,13 @@ export default function App() {
           }))
         }
         onToggleAutoDim={handleToggleAutoDim}
+        onToggleAutoFullscreenWebApp={() =>
+          setSettings((prev) => ({
+            ...prev,
+            autoFullscreenWebApp: !prev.autoFullscreenWebApp,
+          }))
+        }
+        onEnterFullscreenNow={handleEnterFullscreen}
         onChangeCountdownTarget={handleChangeCountdownTarget}
         onChangeTimeUntilTarget={handleChangeTimeUntilTarget}
         onChangeIntervalWork={handleChangeIntervalWork}

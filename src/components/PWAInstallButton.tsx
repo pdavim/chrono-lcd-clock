@@ -83,7 +83,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         {isInstalled ? (
           <span
             data-testid="pwa-installed-status"
-            className="flex h-11 items-center gap-1.5 px-2 text-xs font-semibold text-emerald-300 whitespace-nowrap shrink-0"
+            className="flex h-11 items-center gap-1.5 px-2 text-xs font-semibold settings-accent-text whitespace-nowrap shrink-0"
           >
             <Check className="h-4 w-4" aria-hidden="true" />
             <span>Installed</span>
@@ -93,7 +93,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             type="button"
             id="pwa-install-settings-btn"
             onClick={handleTriggerAction}
-            className="flex h-11 items-center justify-center gap-1.5 rounded-lg border border-emerald-400/70 bg-emerald-400/15 px-3.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-400/25 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="flex h-11 items-center justify-center gap-1.5 rounded-xl border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer settings-accent-soft settings-focus-outline"
           >
             {isInstallable ? (
               <>
@@ -170,7 +170,7 @@ function InstallGuideModal({ isIPad, isIOS, onClose }: InstallGuideModalProps) {
         <ol className="mt-3.5 flex flex-col gap-3 text-xs text-slate-300">
           <li className="flex items-start gap-2.5">
             <Share
-              className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400"
+              className="mt-0.5 h-4 w-4 shrink-0 settings-accent-text"
               aria-hidden="true"
             />
             <span>
@@ -180,7 +180,7 @@ function InstallGuideModal({ isIPad, isIOS, onClose }: InstallGuideModalProps) {
           </li>
           <li className="flex items-start gap-2.5">
             <PlusSquare
-              className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400"
+              className="mt-0.5 h-4 w-4 shrink-0 settings-accent-text"
               aria-hidden="true"
             />
             <span>
@@ -192,13 +192,14 @@ function InstallGuideModal({ isIPad, isIOS, onClose }: InstallGuideModalProps) {
           </li>
           <li className="flex items-start gap-2.5">
             <Smartphone
-              className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400"
+              className="mt-0.5 h-4 w-4 shrink-0 settings-accent-text"
               aria-hidden="true"
             />
             <span>
-              <strong>3. Launch full-screen:</strong> Tap the{' '}
-              <strong>Chrono80</strong> icon on your Home Screen for an
-              edge-to-edge native app experience without Safari address bars.
+              <strong>3. Hide top status bar:</strong> Launch{' '}
+              <strong>Chrono80</strong> from your Home Screen. On iPadOS, tap
+              once (or use the Full Screen icon) to hide the top status bar; on
+              iPhone, rotate to Landscape for chromeless full screen.
             </span>
           </li>
         </ol>
@@ -207,7 +208,7 @@ function InstallGuideModal({ isIPad, isIOS, onClose }: InstallGuideModalProps) {
           type="button"
           id="close-pwa-guide-btn"
           onClick={onClose}
-          className="mt-5 h-11 w-full rounded-xl bg-emerald-400 text-xs font-semibold text-slate-950 hover:bg-emerald-300 transition-colors cursor-pointer"
+          className="mt-5 h-11 w-full rounded-xl border text-xs font-semibold transition-all cursor-pointer settings-accent-solid settings-focus-outline"
         >
           Got It
         </button>

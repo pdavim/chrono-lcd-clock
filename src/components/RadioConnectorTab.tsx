@@ -359,9 +359,9 @@ export function RadioConnectorTab({
                 type="button"
                 aria-pressed={isSelected}
                 onClick={() => onUpdateMedia({ activeProvider: item.id })}
-                className={`flex h-11 items-center justify-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                className={`flex h-11 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer settings-focus-outline ${
                   isSelected
-                    ? 'border-emerald-400 bg-emerald-400 text-slate-950'
+                    ? 'settings-accent-solid'
                     : 'border-slate-700 bg-slate-900 text-slate-300 hover:text-white'
                 }`}
               >
@@ -390,12 +390,12 @@ export function RadioConnectorTab({
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search live stations (e.g. SomaFM, BBC, Synth)..."
               aria-label="Search live internet radio stations"
-              className="h-11 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus-visible:border-emerald-400 focus-visible:outline-none"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 settings-focus-ring"
             />
             <button
               id="radio-search-btn"
               type="submit"
-              className="flex h-11 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3.5 text-xs font-semibold text-white hover:bg-slate-700 cursor-pointer shrink-0"
+              className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 text-xs font-semibold text-white hover:bg-slate-700 cursor-pointer shrink-0"
             >
               <Search className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Search</span>
@@ -415,9 +415,9 @@ export function RadioConnectorTab({
                     setSelectedTag(genre.id);
                     void fetchRadioStations('', genre.id);
                   }}
-                  className={`h-9 rounded-lg border px-2.5 text-[11px] font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                  className={`min-h-[44px] rounded-xl border px-2.5 text-xs font-medium transition-colors whitespace-nowrap cursor-pointer settings-focus-outline ${
                     isTagActive
-                      ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-200'
+                      ? 'settings-accent-soft'
                       : 'border-slate-800 bg-slate-900/70 text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -432,7 +432,7 @@ export function RadioConnectorTab({
           )}
 
           {/* Station Results List */}
-          <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-0.5">
+          <div className="flex max-h-52 flex-col gap-1.5 overflow-y-auto pr-1 settings-scroll">
             {isSearchingRadio ? (
               <p className="py-4 text-center text-xs text-slate-400">
                 Scanning live HTTPS radio directory...
@@ -449,9 +449,9 @@ export function RadioConnectorTab({
                     key={st.id}
                     type="button"
                     onClick={() => handleSelectStation(st)}
-                    className={`flex min-h-[46px] items-center justify-between gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors cursor-pointer ${
+                    className={`flex min-h-[48px] items-center justify-between gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors cursor-pointer settings-focus-outline ${
                       isTuned
-                        ? 'border-emerald-400 bg-emerald-400/15 text-emerald-100'
+                        ? 'settings-accent-card'
                         : 'border-slate-800 bg-slate-900/80 text-slate-200 hover:border-slate-600'
                     }`}
                   >
@@ -467,7 +467,7 @@ export function RadioConnectorTab({
                           .join(' · ') || 'Live Stream'}
                       </p>
                     </div>
-                    <span className="flex h-8 items-center gap-1 rounded-lg bg-slate-800/90 px-2.5 text-[11px] font-semibold text-emerald-300 shrink-0">
+                    <span className="flex h-8 items-center gap-1 rounded-lg bg-slate-800/90 px-2.5 text-[11px] font-semibold settings-accent-text shrink-0">
                       {isTuned ? (
                         <>
                           <Check className="h-3.5 w-3.5" aria-hidden="true" />
@@ -507,12 +507,12 @@ export function RadioConnectorTab({
                   if (customStreamError) setCustomStreamError(null);
                 }}
                 placeholder="https://ice1.somafm.com/u80s-128-mp3"
-                className="h-11 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus-visible:border-emerald-400 focus-visible:outline-none"
+                className="h-11 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 settings-focus-ring"
               />
               <button
                 id="custom-radio-tune-btn"
                 type="submit"
-                className="h-11 rounded-lg bg-emerald-400 px-3.5 text-xs font-bold text-slate-950 hover:bg-emerald-300 whitespace-nowrap shrink-0 cursor-pointer"
+                className="h-11 rounded-xl border px-3.5 text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer settings-accent-solid"
               >
                 Tune URL
               </button>
@@ -544,7 +544,7 @@ export function RadioConnectorTab({
                   if (spotifyError) setSpotifyError(null);
                 }}
                 placeholder="https://open.spotify.com/playlist/..."
-                className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus-visible:border-emerald-400 focus-visible:outline-none"
+                className="h-11 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 settings-focus-ring"
               />
             </div>
 
@@ -557,15 +557,15 @@ export function RadioConnectorTab({
                 onChange={(e) => setSpotifyTitleDraft(e.target.value)}
                 placeholder="Display label (e.g. Morning Synth)"
                 aria-label="Spotify playlist label"
-                className="h-11 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus-visible:border-emerald-400 focus-visible:outline-none"
+                className="h-11 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 settings-focus-ring"
               />
               <button
                 id="spotify-play-btn"
                 type="submit"
-                className="flex h-11 items-center gap-1.5 rounded-lg bg-emerald-400 px-4 text-xs font-bold text-slate-950 hover:bg-emerald-300 whitespace-nowrap shrink-0 cursor-pointer"
+                className="flex h-11 items-center gap-1.5 rounded-xl border px-4 text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer settings-accent-solid"
               >
                 <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
-                <span>Load & Play</span>
+                <span>Load &amp; Play</span>
               </button>
             </div>
             {spotifyError && (
@@ -593,7 +593,7 @@ export function RadioConnectorTab({
                   id="spotify-oauth-connect-btn"
                   type="button"
                   onClick={handleConnectSpotifyOAuth}
-                  className="flex h-10 items-center gap-1.5 rounded-lg border border-emerald-400/60 bg-emerald-400/15 px-3 text-xs font-semibold text-emerald-300 hover:bg-emerald-400/25 whitespace-nowrap shrink-0 cursor-pointer"
+                  className="flex h-11 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer settings-accent-soft"
                 >
                   <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>Connect</span>
@@ -604,7 +604,7 @@ export function RadioConnectorTab({
                   type="button"
                   onClick={handleDisconnectSpotify}
                   aria-label="Disconnect Spotify"
-                  className="flex h-10 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 text-xs text-slate-300 hover:text-white shrink-0 cursor-pointer"
+                  className="flex h-11 items-center gap-1 rounded-xl border border-slate-700 bg-slate-800 px-2.5 text-xs text-slate-300 hover:text-white shrink-0 cursor-pointer"
                 >
                   <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>Disconnect</span>
@@ -617,7 +617,7 @@ export function RadioConnectorTab({
             )}
 
             {spotifyStatus?.connected && spotifyPlaylists.length > 0 && (
-              <div className="mt-1 flex max-h-36 flex-col gap-1.5 overflow-y-auto">
+              <div className="mt-1 flex max-h-36 flex-col gap-1.5 overflow-y-auto pr-1 settings-scroll">
                 {spotifyPlaylists.map((pl) => (
                   <button
                     key={pl.id}
@@ -632,7 +632,7 @@ export function RadioConnectorTab({
                       });
                       onPlayMediaNow();
                     }}
-                    className="flex min-h-[42px] items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-1.5 text-left text-xs text-slate-200 hover:border-emerald-400/60 cursor-pointer"
+                    className="flex min-h-[44px] items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-1.5 text-left text-xs text-slate-200 hover:border-slate-600 cursor-pointer"
                   >
                     <span className="truncate font-medium">{pl.name}</span>
                     <span className="text-[11px] text-slate-400 shrink-0">
@@ -668,7 +668,7 @@ export function RadioConnectorTab({
                 if (youtubeError) setYoutubeError(null);
               }}
               placeholder="https://www.youtube.com/playlist?list=... or watch?v=..."
-              className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus-visible:border-emerald-400 focus-visible:outline-none"
+              className="h-11 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 settings-focus-ring"
             />
           </div>
 
@@ -681,15 +681,15 @@ export function RadioConnectorTab({
               onChange={(e) => setYoutubeTitleDraft(e.target.value)}
               placeholder="Display label (e.g. Lofi Radio)"
               aria-label="YouTube playlist label"
-              className="h-11 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus-visible:border-emerald-400 focus-visible:outline-none"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 settings-focus-ring"
             />
             <button
               id="youtube-play-btn"
               type="submit"
-              className="flex h-11 items-center gap-1.5 rounded-lg bg-emerald-400 px-4 text-xs font-bold text-slate-950 hover:bg-emerald-300 whitespace-nowrap shrink-0 cursor-pointer"
+              className="flex h-11 items-center gap-1.5 rounded-xl border px-4 text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer settings-accent-solid"
             >
               <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
-              <span>Load & Play</span>
+              <span>Load &amp; Play</span>
             </button>
           </div>
           {youtubeError && (
@@ -720,7 +720,7 @@ export function RadioConnectorTab({
                 if (appleError) setAppleError(null);
               }}
               placeholder="https://music.apple.com/us/playlist/..."
-              className="h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus-visible:border-emerald-400 focus-visible:outline-none"
+              className="h-11 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 settings-focus-ring"
             />
           </div>
 
@@ -733,12 +733,12 @@ export function RadioConnectorTab({
               onChange={(e) => setAppleTitleDraft(e.target.value)}
               placeholder="Display label (e.g. 80s Essentials)"
               aria-label="Apple Music playlist label"
-              className="h-11 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus-visible:border-emerald-400 focus-visible:outline-none"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 settings-focus-ring"
             />
             <button
               id="apple-music-play-btn"
               type="submit"
-              className="flex h-11 items-center gap-1.5 rounded-lg bg-emerald-400 px-4 text-xs font-bold text-slate-950 hover:bg-emerald-300 whitespace-nowrap shrink-0 cursor-pointer"
+              className="flex h-11 items-center gap-1.5 rounded-xl border px-4 text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer settings-accent-solid"
             >
               <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
               <span>Open Deck</span>
@@ -773,9 +773,9 @@ export function RadioConnectorTab({
               onClick={() =>
                 onUpdateMedia({ alarmWakeMode: AlarmWakeMode.RetroTone })
               }
-              className={`h-10 rounded-lg border px-2.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+              className={`h-11 rounded-xl border px-2.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                 media.alarmWakeMode === AlarmWakeMode.RetroTone
-                  ? 'border-emerald-400 bg-emerald-400 text-slate-950'
+                  ? 'settings-accent-solid'
                   : 'border-slate-700 bg-slate-900 text-slate-300 hover:text-white'
               }`}
             >
@@ -788,9 +788,9 @@ export function RadioConnectorTab({
               onClick={() =>
                 onUpdateMedia({ alarmWakeMode: AlarmWakeMode.Media })
               }
-              className={`h-10 rounded-lg border px-2.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+              className={`h-11 rounded-xl border px-2.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                 media.alarmWakeMode === AlarmWakeMode.Media
-                  ? 'border-emerald-400 bg-emerald-400 text-slate-950'
+                  ? 'settings-accent-solid'
                   : 'border-slate-700 bg-slate-900 text-slate-300 hover:text-white'
               }`}
             >
@@ -818,9 +818,9 @@ export function RadioConnectorTab({
               onClick={() =>
                 onUpdateMedia({ alarmBackupTone: !media.alarmBackupTone })
               }
-              className={`flex h-10 min-w-[82px] items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`flex h-11 min-w-[82px] items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 media.alarmBackupTone
-                  ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
+                  ? 'settings-accent-soft'
                   : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -846,7 +846,7 @@ export function RadioConnectorTab({
               onChange={(e) =>
                 onUpdateMedia({ volume: parseInt(e.target.value, 10) })
               }
-              className="h-8 w-28 sm:w-36 accent-emerald-400 cursor-pointer"
+              className="h-8 w-28 sm:w-36 settings-range cursor-pointer"
             />
             <span className="w-9 text-right text-xs font-medium text-slate-400 tabular-nums">
               {media.volume}%
@@ -863,7 +863,7 @@ export function RadioConnectorTab({
               id="settings-radio-play-btn"
               type="button"
               onClick={onPlayMediaNow}
-              className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-emerald-400/70 bg-emerald-400/15 px-3 text-xs font-semibold text-emerald-300 hover:bg-emerald-400/25 cursor-pointer"
+              className="flex h-11 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-semibold cursor-pointer settings-accent-soft"
             >
               <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
               <span>Play</span>
@@ -872,7 +872,7 @@ export function RadioConnectorTab({
               id="settings-radio-pause-btn"
               type="button"
               onClick={onPauseMediaNow}
-              className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs font-semibold text-slate-300 hover:text-white cursor-pointer"
+              className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs font-semibold text-slate-300 hover:text-white cursor-pointer"
             >
               <Pause className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
               <span>Pause</span>

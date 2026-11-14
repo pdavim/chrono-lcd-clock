@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  canRequestNativeFullscreen,
   exitNativeFullscreen,
   getNativeFullscreenElement,
   isExitFullscreenRightSwipe,
   isStandaloneDisplayMode,
   requestNativeFullscreen,
+  shouldShowFullscreenButton,
 } from './fullscreen';
 
 test('isExitFullscreenRightSwipe recognizes bottom-to-top drags on the right side of the screen', () => {
@@ -138,4 +140,47 @@ test('isStandaloneDisplayMode and native fullscreen helpers handle browser and f
   assert.equal(getNativeFullscreenElement(fakeDoc), fakeEl);
   assert.equal(await exitNativeFullscreen(fakeDoc), true);
   assert.equal(exited, true);
+
+  // Standalone display-mode: fullscreen also counts as standalone WebApp
+  assert.equal(
+    isStandaloneDisplayMode(
+      {
+        matchMedia: (query: string) =>
+          ({ matches: query === '(display-mode: fullscreen)' } as MediaQueryList),
+      },
+      {}
+    ),
+    true
+  );
+
+  // Browser mode always shows Full Screen button
+  assert.equal(
+    shouldShowFullscreenButton({ isStandalone: false, doc: null, el: null }),
+    true
+  );
+
+  // iPadOS / Android standalone WebApp with Fullscreen API enabled keeps Full Screen button so status bar can be hidden
+  assert.equal(
+    canRequestNativeFullscreen({ webkitFullscreenEnabled: true }, {}),
+    true
+  );
+  assert.equal(
+    shouldShowFullscreenButton({
+      isStandalone: true,
+      doc: { webkitFullscreenEnabled: true },
+      el: {},
+    }),
+    true
+  );
+
+  // iPhone standalone WebClip where Element Fullscreen is unsupported hides redundant Full Screen button
+  assert.equal(
+    shouldShowFullscreenButton({
+      isStandalone: true,
+      doc: { fullscreenEnabled: false },
+      el: {},
+    }),
+    false
+  );
 });
+

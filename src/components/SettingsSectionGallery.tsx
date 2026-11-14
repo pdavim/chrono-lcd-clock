@@ -7,13 +7,31 @@ export type SettingsTabId =
   | 'presets'
   | 'display'
   | 'radio'
-  | 'alerts';
+  | 'alerts'
+  | 'about';
 
 interface SettingsSectionGalleryProps {
   activeTab: SettingsTabId;
   settings: ClockSettings;
   presetsCount: number;
   onSelectTab: (tab: SettingsTabId) => void;
+}
+
+export function getSettingsTabTitle(tab: SettingsTabId): string {
+  switch (tab) {
+    case 'timer':
+      return 'Timer';
+    case 'presets':
+      return 'Presets';
+    case 'display':
+      return 'Display';
+    case 'radio':
+      return 'Radio';
+    case 'alerts':
+      return 'Alerts';
+    case 'about':
+      return 'About';
+  }
 }
 
 function getModeShortLabel(mode: ClockMode): string {
@@ -68,14 +86,14 @@ function SectionThumbnail({
   isSelected: boolean;
 }) {
   const frameClass = isSelected
-    ? 'border-emerald-400/50 bg-slate-950 text-emerald-300'
-    : 'border-slate-800 bg-slate-950/90 text-slate-400 group-hover:border-slate-700 group-hover:text-emerald-300/85';
+    ? 'settings-accent-thumb'
+    : 'settings-idle-thumb';
 
   if (id === 'timer') {
     return (
       <div
         aria-hidden="true"
-        className={`relative flex h-10 sm:h-12 w-full items-center justify-center overflow-hidden rounded-lg border transition-colors ${frameClass}`}
+        className={`relative flex h-11 sm:h-12 w-full items-center justify-center overflow-hidden rounded-xl border transition-colors ${frameClass}`}
       >
         <svg
           viewBox="0 0 96 40"
@@ -90,12 +108,11 @@ function SectionThumbnail({
             height="28"
             rx="4"
             stroke="currentColor"
-            strokeOpacity="0.22"
+            strokeOpacity="0.24"
             strokeWidth="1"
           />
-          {/* Mini 7-segment stylized 05:00 */}
           <text
-            x="48"
+            x="51"
             y="24"
             textAnchor="middle"
             fill="currentColor"
@@ -109,7 +126,7 @@ function SectionThumbnail({
           <polygon
             points="13,17 13,23 18,20"
             fill="currentColor"
-            fillOpacity="0.75"
+            fillOpacity="0.8"
           />
         </svg>
       </div>
@@ -120,7 +137,7 @@ function SectionThumbnail({
     return (
       <div
         aria-hidden="true"
-        className={`relative flex h-10 sm:h-12 w-full items-center justify-center overflow-hidden rounded-lg border transition-colors ${frameClass}`}
+        className={`relative flex h-11 sm:h-12 w-full items-center justify-center overflow-hidden rounded-xl border transition-colors ${frameClass}`}
       >
         <svg
           viewBox="0 0 96 40"
@@ -128,86 +145,69 @@ function SectionThumbnail({
           fill="none"
           aria-hidden="true"
         >
+          {/* Mode Tabs Strip + 2x2 Gallery Thumbnail Schematic */}
           <rect
-            x="10"
-            y="7"
-            width="76"
-            height="7"
-            rx="2"
-            fill="currentColor"
-            fillOpacity="0.2"
-          />
-          <rect
-            x="14"
-            y="9.5"
-            width="22"
-            height="2"
-            rx="1"
-            fill="currentColor"
-          />
-          <rect
-            x="66"
-            y="9.5"
-            width="14"
-            height="2"
-            rx="1"
-            fill="currentColor"
-            fillOpacity="0.65"
-          />
-
-          <rect
-            x="10"
-            y="16.5"
-            width="76"
-            height="7"
-            rx="2"
-            fill="currentColor"
-            fillOpacity="0.34"
-          />
-          <rect
-            x="14"
-            y="19"
-            width="28"
-            height="2"
-            rx="1"
-            fill="currentColor"
-          />
-          <rect
-            x="66"
-            y="19"
-            width="14"
-            height="2"
-            rx="1"
+            x="8"
+            y="5.5"
+            width="24"
+            height="5"
+            rx="1.5"
             fill="currentColor"
             fillOpacity="0.85"
           />
-
           <rect
-            x="10"
-            y="26"
-            width="76"
-            height="7"
+            x="35"
+            y="5.5"
+            width="24"
+            height="5"
+            rx="1.5"
+            fill="currentColor"
+            fillOpacity="0.22"
+          />
+          <rect
+            x="62"
+            y="5.5"
+            width="26"
+            height="5"
+            rx="1.5"
+            fill="currentColor"
+            fillOpacity="0.22"
+          />
+          <rect
+            x="8"
+            y="13.5"
+            width="38"
+            height="9.5"
+            rx="2"
+            fill="currentColor"
+            fillOpacity="0.28"
+          />
+          <rect
+            x="50"
+            y="13.5"
+            width="38"
+            height="9.5"
             rx="2"
             fill="currentColor"
             fillOpacity="0.16"
           />
           <rect
-            x="14"
-            y="28.5"
-            width="18"
-            height="2"
-            rx="1"
+            x="8"
+            y="25.5"
+            width="38"
+            height="9.5"
+            rx="2"
             fill="currentColor"
-            fillOpacity="0.8"
+            fillOpacity="0.16"
           />
           <rect
-            x="66"
-            y="28.5"
-            width="14"
-            height="2"
-            rx="1"
+            x="50"
+            y="25.5"
+            width="38"
+            height="9.5"
+            rx="2"
             fill="currentColor"
-            fillOpacity="0.55"
+            fillOpacity="0.24"
           />
         </svg>
       </div>
@@ -218,7 +218,7 @@ function SectionThumbnail({
     return (
       <div
         aria-hidden="true"
-        className={`relative flex h-10 sm:h-12 w-full items-center justify-center overflow-hidden rounded-lg border transition-colors ${frameClass}`}
+        className={`relative flex h-11 sm:h-12 w-full items-center justify-center overflow-hidden rounded-xl border transition-colors ${frameClass}`}
       >
         <svg
           viewBox="0 0 96 40"
@@ -249,7 +249,6 @@ function SectionThumbnail({
           >
             88:88
           </text>
-          {/* Theme Swatch Tiles */}
           <rect
             x="66"
             y="8"
@@ -295,7 +294,7 @@ function SectionThumbnail({
     return (
       <div
         aria-hidden="true"
-        className={`relative flex h-10 sm:h-12 w-full items-center justify-center overflow-hidden rounded-lg border transition-colors ${frameClass}`}
+        className={`relative flex h-11 sm:h-12 w-full items-center justify-center overflow-hidden rounded-xl border transition-colors ${frameClass}`}
       >
         <svg
           viewBox="0 0 96 40"
@@ -303,7 +302,6 @@ function SectionThumbnail({
           fill="none"
           aria-hidden="true"
         >
-          {/* FM Tuner Scale + Equalizer Bars */}
           <line
             x1="10"
             y1="31"
@@ -313,23 +311,138 @@ function SectionThumbnail({
             strokeOpacity="0.28"
             strokeWidth="1.2"
           />
-          <rect x="14" y="19" width="5" height="9" rx="1" fill="currentColor" fillOpacity="0.55" />
-          <rect x="23" y="12" width="5" height="16" rx="1" fill="currentColor" fillOpacity="0.85" />
-          <rect x="32" y="16" width="5" height="12" rx="1" fill="currentColor" fillOpacity="0.65" />
+          <rect
+            x="14"
+            y="19"
+            width="5"
+            height="9"
+            rx="1"
+            fill="currentColor"
+            fillOpacity="0.55"
+          />
+          <rect
+            x="23"
+            y="12"
+            width="5"
+            height="16"
+            rx="1"
+            fill="currentColor"
+            fillOpacity="0.85"
+          />
+          <rect
+            x="32"
+            y="16"
+            width="5"
+            height="12"
+            rx="1"
+            fill="currentColor"
+            fillOpacity="0.65"
+          />
           <rect x="41" y="9" width="5" height="19" rx="1" fill="currentColor" />
-          <rect x="50" y="14" width="5" height="14" rx="1" fill="currentColor" fillOpacity="0.8" />
-          <rect x="59" y="18" width="5" height="10" rx="1" fill="currentColor" fillOpacity="0.6" />
-          <rect x="68" y="11" width="5" height="17" rx="1" fill="currentColor" fillOpacity="0.9" />
-          <rect x="77" y="20" width="5" height="8" rx="1" fill="currentColor" fillOpacity="0.5" />
+          <rect
+            x="50"
+            y="14"
+            width="5"
+            height="14"
+            rx="1"
+            fill="currentColor"
+            fillOpacity="0.8"
+          />
+          <rect
+            x="59"
+            y="18"
+            width="5"
+            height="10"
+            rx="1"
+            fill="currentColor"
+            fillOpacity="0.6"
+          />
+          <rect
+            x="68"
+            y="11"
+            width="5"
+            height="17"
+            rx="1"
+            fill="currentColor"
+            fillOpacity="0.9"
+          />
+          <rect
+            x="77"
+            y="20"
+            width="5"
+            height="8"
+            rx="1"
+            fill="currentColor"
+            fillOpacity="0.5"
+          />
         </svg>
       </div>
     );
   }
 
+  if (id === 'alerts') {
+    return (
+      <div
+        aria-hidden="true"
+        className={`relative flex h-11 sm:h-12 w-full items-center justify-center overflow-hidden rounded-xl border transition-colors ${frameClass}`}
+      >
+        <svg
+          viewBox="0 0 96 40"
+          className="h-full w-full"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M18 16H23L30 10V30L23 24H18V16Z"
+            fill="currentColor"
+            fillOpacity="0.85"
+          />
+          <path
+            d="M35 15C37.5 17.5 37.5 22.5 35 25"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+          <path
+            d="M40 11.5C44.5 16 44.5 24 40 28.5"
+            stroke="currentColor"
+            strokeOpacity="0.65"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+          <circle
+            cx="68"
+            cy="20"
+            r="4"
+            fill="currentColor"
+            fillOpacity="0.9"
+          />
+          <circle
+            cx="68"
+            cy="20"
+            r="8.5"
+            stroke="currentColor"
+            strokeOpacity="0.65"
+            strokeWidth="1.4"
+          />
+          <circle
+            cx="68"
+            cy="20"
+            r="13"
+            stroke="currentColor"
+            strokeOpacity="0.3"
+            strokeWidth="1.2"
+          />
+        </svg>
+      </div>
+    );
+  }
+
+  // 'about': 1980s Quartz Chronometer Bezel + Info Emblem Schematic
   return (
     <div
       aria-hidden="true"
-      className={`relative flex h-10 sm:h-12 w-full items-center justify-center overflow-hidden rounded-lg border transition-colors ${frameClass}`}
+      className={`relative flex h-11 sm:h-12 w-full items-center justify-center overflow-hidden rounded-xl border transition-colors ${frameClass}`}
     >
       <svg
         viewBox="0 0 96 40"
@@ -337,48 +450,38 @@ function SectionThumbnail({
         fill="none"
         aria-hidden="true"
       >
-        {/* Piezo Speaker + Double-Tap Rings */}
-        <path
-          d="M18 16H23L30 10V30L23 24H18V16Z"
+        <rect
+          x="10"
+          y="7"
+          width="50"
+          height="26"
+          rx="5"
+          stroke="currentColor"
+          strokeOpacity="0.45"
+          strokeWidth="1.3"
+        />
+        <text
+          x="35"
+          y="24"
+          textAnchor="middle"
           fill="currentColor"
-          fillOpacity="0.85"
-        />
-        <path
-          d="M35 15C37.5 17.5 37.5 22.5 35 25"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-        />
-        <path
-          d="M40 11.5C44.5 16 44.5 24 40 28.5"
-          stroke="currentColor"
-          strokeOpacity="0.65"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-        />
+          fontFamily="monospace"
+          fontSize="11.5"
+          fontWeight="700"
+          letterSpacing="1"
+        >
+          CH-80
+        </text>
         <circle
-          cx="68"
+          cx="75"
           cy="20"
-          r="4"
-          fill="currentColor"
-          fillOpacity="0.9"
-        />
-        <circle
-          cx="68"
-          cy="20"
-          r="8.5"
+          r="10"
           stroke="currentColor"
-          strokeOpacity="0.65"
+          strokeOpacity="0.7"
           strokeWidth="1.4"
         />
-        <circle
-          cx="68"
-          cy="20"
-          r="13"
-          stroke="currentColor"
-          strokeOpacity="0.3"
-          strokeWidth="1.2"
-        />
+        <circle cx="75" cy="15.5" r="1.3" fill="currentColor" />
+        <rect x="73.9" y="18.5" width="2.2" height="6.8" rx="1" fill="currentColor" />
       </svg>
     </div>
   );
@@ -420,51 +523,54 @@ export function SettingsSectionGallery({
       label: 'Alerts',
       summary: settings.alarmSoundEnabled ? 'Sound & Tap' : 'Muted · Tap',
     },
+    {
+      id: 'about',
+      label: 'About',
+      summary: 'Guide & WebApp',
+    },
   ];
 
   return (
-    <div className="shrink-0 border-b border-white/10 bg-slate-950/80 px-4 pb-3.5 sm:px-6">
-      <div
-        role="tablist"
-        aria-label="Settings sections"
-        data-testid="settings-gallery"
-        className="grid grid-cols-5 gap-1.5 sm:gap-2.5"
-      >
-        {items.map((item) => {
-          const isSelected = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              id={`tab-${item.id}`}
-              data-testid={`gallery-card-${item.id}`}
-              type="button"
-              role="tab"
-              aria-selected={isSelected}
-              aria-controls={`panel-${item.id}`}
-              onClick={() => onSelectTab(item.id)}
-              className={`group flex min-h-[68px] sm:min-h-[88px] min-w-0 flex-col items-stretch justify-between gap-1.5 rounded-xl border p-1.5 sm:p-2 text-left transition-all duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
-                isSelected
-                  ? 'border-emerald-400 bg-emerald-400/12 text-white shadow-sm'
-                  : 'border-slate-800/90 bg-slate-900/65 text-slate-300 hover:border-slate-700 hover:bg-slate-900 hover:text-white'
-              }`}
-            >
-              <SectionThumbnail id={item.id} isSelected={isSelected} />
-              <div className="flex min-w-0 flex-col px-0.5">
-                <span
-                  className={`truncate text-center sm:text-left text-[11px] sm:text-xs font-semibold whitespace-nowrap ${
-                    isSelected ? 'text-emerald-300' : 'text-slate-200'
-                  }`}
-                >
-                  {item.label}
-                </span>
-                <span className="hidden sm:block truncate text-[10px] text-slate-400 tabular-nums">
-                  {item.summary}
-                </span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+    <div
+      role="tablist"
+      aria-label="Settings categories"
+      data-testid="settings-gallery"
+      className="grid grid-cols-2 gap-2.5 sm:gap-3"
+    >
+      {items.map((item) => {
+        const isSelected = activeTab === item.id;
+        return (
+          <button
+            key={item.id}
+            id={`tab-${item.id}`}
+            data-testid={`gallery-card-${item.id}`}
+            type="button"
+            role="tab"
+            aria-selected={isSelected}
+            aria-controls={`panel-${item.id}`}
+            onClick={() => onSelectTab(item.id)}
+            className={`group flex min-h-[88px] sm:min-h-[96px] min-w-0 flex-col items-stretch justify-between gap-2 rounded-2xl border p-2.5 text-left transition-all duration-150 cursor-pointer settings-focus-outline ${
+              isSelected
+                ? 'settings-accent-card shadow-xs'
+                : 'border-slate-800/90 bg-slate-900/65 text-slate-300 hover:border-slate-700 hover:bg-slate-900 hover:text-white'
+            }`}
+          >
+            <SectionThumbnail id={item.id} isSelected={isSelected} />
+            <div className="flex min-w-0 flex-col px-0.5">
+              <span
+                className={`truncate text-xs font-semibold whitespace-nowrap ${
+                  isSelected ? 'settings-accent-text' : 'text-slate-100'
+                }`}
+              >
+                {item.label}
+              </span>
+              <span className="truncate text-[11px] text-slate-400 tabular-nums">
+                {item.summary}
+              </span>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
