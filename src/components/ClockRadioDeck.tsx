@@ -633,7 +633,7 @@ export function ClockRadioDeck({
         aria-hidden={hideVisualChrome}
         inert={hideVisualChrome}
         onClick={(e) => e.stopPropagation()}
-        className={`fixed bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-current/20 bg-black/35 px-2 py-1 backdrop-blur-md transition-opacity duration-200 ${barOpacityClass}`}
+        className={`fixed safe-bottom-offset left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-current/20 bg-black/35 px-2 py-1 backdrop-blur-md transition-opacity duration-200 ${barOpacityClass}`}
       >
         <button
           id="clock-radio-play-btn"

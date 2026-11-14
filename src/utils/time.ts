@@ -6,6 +6,7 @@ export enum ClockMode {
   Countdown = 'countdown',
   TimeUntil = 'time-until',
   Interval = 'interval',
+  Jujitsu = 'jujitsu',
   FocusSession = 'focus',
   AlarmClock = 'alarm',
   LiveClock = 'clock',
@@ -34,6 +35,33 @@ export const ALARM_SOUND_OPTIONS: readonly AlarmSoundOption[] = [
   { id: AlarmSoundId.RetroPager, label: 'Retro Pocket Pager' },
   { id: AlarmSoundId.SynthPulse, label: '80s Synth Pulse' },
 ];
+
+export enum JujitsuSoundId {
+  DojoBell = 'dojo-bell',
+  MatHorn = 'mat-horn',
+  TatamiGong = 'tatami-gong',
+  QuartzBeep = 'quartz-beep',
+  ArcadeFight = 'arcade-fight',
+}
+
+export interface JujitsuSoundOption {
+  id: JujitsuSoundId;
+  label: string;
+}
+
+export const JUJITSU_SOUND_OPTIONS: readonly JujitsuSoundOption[] = [
+  { id: JujitsuSoundId.DojoBell, label: 'Dojo Ring Bell' },
+  { id: JujitsuSoundId.MatHorn, label: 'Arena Mat Horn' },
+  { id: JujitsuSoundId.TatamiGong, label: 'Tatami Deep Gong' },
+  { id: JujitsuSoundId.QuartzBeep, label: '80s Quartz Whistle' },
+  { id: JujitsuSoundId.ArcadeFight, label: 'Arcade Kumite Cue' },
+];
+
+export enum JujitsuPhase {
+  Countdown = 'countdown',
+  Cooldown = 'cooldown',
+  Completed = 'completed',
+}
 
 export enum IntervalPhase {
   Work = 'work',
@@ -119,6 +147,30 @@ export type FocusTransitionEvent =
   | 'break-started'
   | 'completed';
 
+export interface JujitsuConfig {
+  countdown: CountdownTarget;
+  cooldown: CountdownTarget;
+  totalDuration: CountdownTarget;
+  startSoundId: JujitsuSoundId;
+  stopSoundId: JujitsuSoundId;
+}
+
+export interface JujitsuState {
+  phase: JujitsuPhase;
+  round: number;
+  remainingMs: number;
+  totalDurationMs: number;
+  totalRemainingMs: number;
+  lastCooldownCueSecond: number | null;
+}
+
+export type JujitsuStepEvent =
+  | { type: 'cooldown-warning-second'; second: number }
+  | { type: 'countdown-ended' }
+  | { type: 'cooldown-ended' }
+  | { type: 'countdown-started'; round: number }
+  | { type: 'training-completed'; endedFrom: 'countdown' | 'cooldown' };
+
 export interface ClockSettings {
   mode: ClockMode;
   liveClockTimezone: LiveClockTimezone;
@@ -131,6 +183,7 @@ export interface ClockSettings {
   countdownTarget: CountdownTarget;
   timeUntilTarget: TimeUntilTarget;
   intervalConfig: IntervalConfig;
+  jujitsuConfig: JujitsuConfig;
   focusConfig: FocusConfig;
   alarmClock: AlarmClockConfig;
   alarmSoundEnabled: boolean;
@@ -282,6 +335,13 @@ export const DEFAULT_SETTINGS: ClockSettings = {
     work: { hh: 0, mm: 0, ss: 30 },
     rest: { hh: 0, mm: 0, ss: 10 },
     cycles: 4,
+  },
+  jujitsuConfig: {
+    countdown: { hh: 0, mm: 5, ss: 0 },
+    cooldown: { hh: 0, mm: 1, ss: 0 },
+    totalDuration: { hh: 0, mm: 15, ss: 0 },
+    startSoundId: JujitsuSoundId.DojoBell,
+    stopSoundId: JujitsuSoundId.MatHorn,
   },
   focusConfig: {
     work: { hh: 0, mm: 25, ss: 0 },
@@ -999,3 +1059,239 @@ export function shouldShowRadioControlBar(params: {
     params.showRadioControl && !params.isUiHidden && !params.isSettingsOpen
   );
 }
+
+export function shouldShowJujitsuQuickStart(params: {
+  mode: ClockMode;
+  isRunning: boolean;
+  isUiHidden: boolean;
+  isSettingsOpen: boolean;
+  isAlarmRinging: boolean;
+}): boolean {
+  if (params.isUiHidden || params.isSettingsOpen || params.isAlarmRinging) {
+    return false;
+  }
+  if (params.mode === ClockMode.Jujitsu && params.isRunning) {
+    return false;
+  }
+  return true;
+}
+
+export function sanitizeJujitsuSoundId(
+  raw: unknown,
+  fallback: JujitsuSoundId
+): JujitsuSoundId {
+  if (
+    typeof raw === 'string' &&
+    Object.values(JujitsuSoundId).includes(raw as JujitsuSoundId)
+  ) {
+    return raw as JujitsuSoundId;
+  }
+  return fallback;
+}
+
+export function sanitizeJujitsuConfig(
+  raw?: Partial<JujitsuConfig> | null
+): JujitsuConfig {
+  const defaults = DEFAULT_SETTINGS.jujitsuConfig;
+  const countdownClean = sanitizeCountdownTarget(
+    raw?.countdown ?? defaults.countdown
+  );
+  const cooldownClean = sanitizeCountdownTarget(
+    raw?.cooldown ?? defaults.cooldown
+  );
+  const totalClean = sanitizeCountdownTarget(
+    raw?.totalDuration ?? defaults.totalDuration
+  );
+
+  const countdownFinal =
+    countdownTargetToMs(countdownClean) <= 0
+      ? { hh: 0, mm: 0, ss: 1 }
+      : countdownClean;
+
+  const totalFinal =
+    countdownTargetToMs(totalClean) <= 0 ? { hh: 0, mm: 0, ss: 1 } : totalClean;
+
+  return {
+    countdown: countdownFinal,
+    cooldown: cooldownClean,
+    totalDuration: totalFinal,
+    startSoundId: sanitizeJujitsuSoundId(
+      raw?.startSoundId,
+      defaults.startSoundId
+    ),
+    stopSoundId: sanitizeJujitsuSoundId(raw?.stopSoundId, defaults.stopSoundId),
+  };
+}
+
+export function createInitialJujitsuState(config: JujitsuConfig): JujitsuState {
+  const clean = sanitizeJujitsuConfig(config);
+  const countdownMs = countdownTargetToMs(clean.countdown);
+  const totalDurationMs = countdownTargetToMs(clean.totalDuration);
+  return {
+    phase: JujitsuPhase.Countdown,
+    round: 1,
+    remainingMs: Math.min(countdownMs, totalDurationMs),
+    totalDurationMs,
+    totalRemainingMs: totalDurationMs,
+    lastCooldownCueSecond: null,
+  };
+}
+
+function collectCooldownWarningSeconds(
+  prevRemainingMs: number,
+  nextRemainingMs: number,
+  lastCueSecond: number | null
+): { triggeredSeconds: number[]; nextLastCueSecond: number | null } {
+  const triggeredSeconds: number[] = [];
+  let updatedLastCue = lastCueSecond;
+
+  for (const sec of [5, 4, 3, 2, 1]) {
+    const thresholdMs = sec * 1000;
+    const alreadyCued = updatedLastCue !== null && sec >= updatedLastCue;
+    if (
+      !alreadyCued &&
+      prevRemainingMs >= thresholdMs &&
+      nextRemainingMs < thresholdMs
+    ) {
+      triggeredSeconds.push(sec);
+      updatedLastCue = sec;
+    }
+  }
+
+  return { triggeredSeconds, nextLastCueSecond: updatedLastCue };
+}
+
+export function stepJujitsuState(
+  state: JujitsuState,
+  config: JujitsuConfig,
+  deltaMs: number
+): { nextState: JujitsuState; events: JujitsuStepEvent[] } {
+  if (state.phase === JujitsuPhase.Completed || deltaMs <= 0) {
+    return { nextState: state, events: [] };
+  }
+
+  const clean = sanitizeJujitsuConfig(config);
+  const countdownMs = countdownTargetToMs(clean.countdown);
+  const cooldownMs = countdownTargetToMs(clean.cooldown);
+  const totalDurationMs = countdownTargetToMs(clean.totalDuration);
+
+  let current: JujitsuState = {
+    ...state,
+    totalDurationMs,
+  };
+  let remainingDelta = deltaMs;
+  const events: JujitsuStepEvent[] = [];
+
+  let safety = 0;
+  while (
+    remainingDelta > 0 &&
+    current.phase !== JujitsuPhase.Completed &&
+    safety < 500
+  ) {
+    safety += 1;
+    const phaseBudgetMs = Math.min(current.remainingMs, current.totalRemainingMs);
+
+    if (remainingDelta < phaseBudgetMs) {
+      const prevPhaseRem = current.remainingMs;
+      const nextPhaseRem = current.remainingMs - remainingDelta;
+      const nextTotalRem = Math.max(0, current.totalRemainingMs - remainingDelta);
+      let nextLastCue = current.lastCooldownCueSecond;
+
+      if (current.phase === JujitsuPhase.Cooldown) {
+        const warning = collectCooldownWarningSeconds(
+          prevPhaseRem,
+          nextPhaseRem,
+          nextLastCue
+        );
+        for (const sec of warning.triggeredSeconds) {
+          events.push({ type: 'cooldown-warning-second', second: sec });
+        }
+        nextLastCue = warning.nextLastCueSecond;
+      }
+
+      current = {
+        ...current,
+        remainingMs: nextPhaseRem,
+        totalRemainingMs: nextTotalRem,
+        lastCooldownCueSecond: nextLastCue,
+      };
+      remainingDelta = 0;
+    } else {
+      remainingDelta -= phaseBudgetMs;
+      const nextTotalRem = Math.max(0, current.totalRemainingMs - phaseBudgetMs);
+
+      if (current.phase === JujitsuPhase.Cooldown) {
+        const warning = collectCooldownWarningSeconds(
+          current.remainingMs,
+          0,
+          current.lastCooldownCueSecond
+        );
+        for (const sec of warning.triggeredSeconds) {
+          events.push({ type: 'cooldown-warning-second', second: sec });
+        }
+        events.push({ type: 'cooldown-ended' });
+
+        if (nextTotalRem <= 0) {
+          current = {
+            phase: JujitsuPhase.Completed,
+            round: current.round,
+            remainingMs: 0,
+            totalDurationMs,
+            totalRemainingMs: 0,
+            lastCooldownCueSecond: null,
+          };
+          events.push({ type: 'training-completed', endedFrom: 'cooldown' });
+        } else {
+          const nextRound = current.round + 1;
+          current = {
+            phase: JujitsuPhase.Countdown,
+            round: nextRound,
+            remainingMs: Math.min(countdownMs, nextTotalRem),
+            totalDurationMs,
+            totalRemainingMs: nextTotalRem,
+            lastCooldownCueSecond: null,
+          };
+          events.push({ type: 'countdown-started', round: nextRound });
+        }
+      } else {
+        // Countdown phase finished
+        events.push({ type: 'countdown-ended' });
+
+        if (nextTotalRem <= 0) {
+          current = {
+            phase: JujitsuPhase.Completed,
+            round: current.round,
+            remainingMs: 0,
+            totalDurationMs,
+            totalRemainingMs: 0,
+            lastCooldownCueSecond: null,
+          };
+          events.push({ type: 'training-completed', endedFrom: 'countdown' });
+        } else if (cooldownMs > 0) {
+          current = {
+            phase: JujitsuPhase.Cooldown,
+            round: current.round,
+            remainingMs: Math.min(cooldownMs, nextTotalRem),
+            totalDurationMs,
+            totalRemainingMs: nextTotalRem,
+            lastCooldownCueSecond: null,
+          };
+        } else {
+          const nextRound = current.round + 1;
+          current = {
+            phase: JujitsuPhase.Countdown,
+            round: nextRound,
+            remainingMs: Math.min(countdownMs, nextTotalRem),
+            totalDurationMs,
+            totalRemainingMs: nextTotalRem,
+            lastCooldownCueSecond: null,
+          };
+          events.push({ type: 'countdown-started', round: nextRound });
+        }
+      }
+    }
+  }
+
+  return { nextState: current, events };
+}
+

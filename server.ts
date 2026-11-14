@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -142,6 +143,7 @@ async function refreshSpotifySessionIfNeeded(
 
 async function startServer(): Promise<void> {
   const app = express();
+  const httpServer = http.createServer(app);
   app.set('trust proxy', 1);
   app.use(express.json());
 
@@ -476,12 +478,14 @@ async function startServer(): Promise<void> {
     process.execArgv.some((arg) => arg.includes('tsx'));
 
   if (!isProd || runningUnderTsx) {
+    const hmrEnabled = process.env.DISABLE_HMR !== 'true';
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: process.env.DISABLE_HMR !== 'true',
-        watch: process.env.DISABLE_HMR === 'true' ? null : {},
+        hmr: hmrEnabled ? { server: httpServer } : false,
+        ws: hmrEnabled ? { server: httpServer } : false,
+        watch: hmrEnabled ? {} : null,
       },
       appType: 'spa',
     });
@@ -493,7 +497,7 @@ async function startServer(): Promise<void> {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Chrono80 server listening on http://0.0.0.0:${PORT}`);
   });
 }

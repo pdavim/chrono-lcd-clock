@@ -1,11 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AlarmSoundId, DEFAULT_SETTINGS } from './time';
+import {
+  AlarmSoundId,
+  DEFAULT_SETTINGS,
+  JUJITSU_SOUND_OPTIONS,
+  JujitsuSoundId,
+} from './time';
 import {
   GRADUAL_ALARM_MIN_SCALE,
   GRADUAL_ALARM_RAMP_MS,
   computeGradualVolumeScale,
   getAlarmToneSequence,
+  getJujitsuCooldownTickSequence,
+  getJujitsuStartLongSequence,
+  getJujitsuStopDoubleSequence,
   getTickTockParams,
   getVibrationPattern,
   stopVibration,
@@ -98,4 +106,48 @@ test('computeGradualVolumeScale fades alarm volume smoothly from 5% to 100% over
   assert.equal(computeGradualVolumeScale(30_000), 1);
   assert.equal(computeGradualVolumeScale(45_000), 1);
 });
+
+test('Jujitsu tones produce sustained start/finish cues, double-strike stop cues, and quick cooldown pips', () => {
+  const startSignatures = new Set<string>();
+  const stopSignatures = new Set<string>();
+
+  for (const opt of JUJITSU_SOUND_OPTIONS) {
+    const startSeq = getJujitsuStartLongSequence(opt.id);
+    const stopSeq = getJujitsuStopDoubleSequence(opt.id);
+
+    const totalStartEndMs = Math.max(
+      ...startSeq.map((n) => n.offsetMs + n.durationMs)
+    );
+    // Start / Cooldown-finish sound is sustained (>= 800ms)
+    assert.ok(totalStartEndMs >= 800);
+
+    // Stop sound is a distinct double sound (notes anchored in two strike clusters at 0ms and >= 250ms)
+    const hasFirstStrike = stopSeq.some((n) => n.offsetMs === 0);
+    const hasSecondStrike = stopSeq.some((n) => n.offsetMs >= 250);
+    assert.equal(hasFirstStrike, true);
+    assert.equal(hasSecondStrike, true);
+
+    startSignatures.add(
+      startSeq.map((n) => `${n.freq}:${n.type}:${n.durationMs}`).join('|')
+    );
+    stopSignatures.add(
+      stopSeq.map((n) => `${n.freq}:${n.offsetMs}:${n.type}`).join('|')
+    );
+  }
+
+  assert.equal(startSignatures.size, JUJITSU_SOUND_OPTIONS.length);
+  assert.equal(stopSignatures.size, JUJITSU_SOUND_OPTIONS.length);
+
+  // Cooldown per-second pip is quick (<= 100ms) with higher final-second accent
+  const pip5 = getJujitsuCooldownTickSequence(5);
+  const pip1 = getJujitsuCooldownTickSequence(1);
+  assert.equal(pip5.length, 1);
+  assert.ok(pip5[0].durationMs <= 100);
+  assert.ok(pip1[0].freq > pip5[0].freq);
+  assert.notEqual(
+    JujitsuSoundId.DojoBell,
+    JujitsuSoundId.MatHorn
+  );
+});
+
 

@@ -49,6 +49,8 @@ import {
   FONT_OPTIONS,
   FocusState,
   FontOptionId,
+  JUJITSU_SOUND_OPTIONS,
+  JujitsuSoundId,
   LiveClockTimezone,
   TimeFieldKey,
   TimeUntilTarget,
@@ -60,6 +62,7 @@ import {
   formatTimeUntilLabel,
   resolveNextTargetTimestampMs,
 } from '../utils/time';
+import { PWAInstallButton } from './PWAInstallButton';
 import { RadioConnectorTab } from './RadioConnectorTab';
 
 export type SettingsTabId = 'timer' | 'radio' | 'display' | 'alerts';
@@ -164,6 +167,13 @@ interface SettingsDrawerProps {
   onChangeIntervalWork: (work: CountdownTarget) => void;
   onChangeIntervalRest: (rest: CountdownTarget) => void;
   onChangeIntervalCycles: (cycles: number) => void;
+  onChangeJujitsuCountdown: (countdown: CountdownTarget) => void;
+  onChangeJujitsuCooldown: (cooldown: CountdownTarget) => void;
+  onChangeJujitsuTotalDuration: (totalDuration: CountdownTarget) => void;
+  onChangeJujitsuStartSound: (soundId: JujitsuSoundId) => void;
+  onTestJujitsuStartSound: () => void;
+  onChangeJujitsuStopSound: (soundId: JujitsuSoundId) => void;
+  onTestJujitsuStopSound: () => void;
   onChangeFocusWork: (work: CountdownTarget) => void;
   onChangeFocusBreak: (breakDuration: CountdownTarget) => void;
   onChangeFocusSessions: (sessions: number) => void;
@@ -237,6 +247,13 @@ export function SettingsDrawer({
   onChangeIntervalWork,
   onChangeIntervalRest,
   onChangeIntervalCycles,
+  onChangeJujitsuCountdown,
+  onChangeJujitsuCooldown,
+  onChangeJujitsuTotalDuration,
+  onChangeJujitsuStartSound,
+  onTestJujitsuStartSound,
+  onChangeJujitsuStopSound,
+  onTestJujitsuStopSound,
   onChangeFocusWork,
   onChangeFocusBreak,
   onChangeFocusSessions,
@@ -310,6 +327,7 @@ export function SettingsDrawer({
     settings.mode === ClockMode.Countdown ||
     settings.mode === ClockMode.TimeUntil ||
     settings.mode === ClockMode.Interval ||
+    settings.mode === ClockMode.Jujitsu ||
     settings.mode === ClockMode.FocusSession ||
     settings.mode === ClockMode.AlarmClock;
 
@@ -413,7 +431,7 @@ export function SettingsDrawer({
         </div>
 
         {/* Scrollable Tab Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 pb-6">
+        <div className="flex-1 overflow-y-auto px-5 py-4 pb-safe-sheet">
           {/* TAB 1: TIMER & PRESETS */}
           {activeTab === 'timer' && (
             <div
@@ -434,8 +452,19 @@ export function SettingsDrawer({
                   id="mode-select"
                   value={settings.mode}
                   onChange={(e) => {
+                    const nextMode = e.target.value as ClockMode;
                     setPresetError(null);
-                    onChangeMode(e.target.value as ClockMode);
+                    if (presetCategoryFilter === 'all') {
+                      if (
+                        nextMode === ClockMode.Jujitsu ||
+                        nextMode === ClockMode.Interval
+                      ) {
+                        setNewPresetCategory(PresetCategory.Exercise);
+                      } else if (nextMode === ClockMode.FocusSession) {
+                        setNewPresetCategory(PresetCategory.Work);
+                      }
+                    }
+                    onChangeMode(nextMode);
                   }}
                   className="h-11 w-52 sm:w-60 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
                 >
@@ -443,6 +472,7 @@ export function SettingsDrawer({
                   <option value={ClockMode.Countdown}>Countdown</option>
                   <option value={ClockMode.TimeUntil}>Time Until</option>
                   <option value={ClockMode.Interval}>Interval Training</option>
+                  <option value={ClockMode.Jujitsu}>Jujitsu</option>
                   <option value={ClockMode.FocusSession}>Focus Session</option>
                   <option value={ClockMode.AlarmClock}>Alarm Clock</option>
                   <option value={ClockMode.LiveClock}>Live Clock</option>
@@ -579,6 +609,136 @@ export function SettingsDrawer({
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Jujitsu (Combat / Kumite Training) Setup */}
+              {settings.mode === ClockMode.Jujitsu && (
+                <div
+                  data-testid="jujitsu-settings-group"
+                  className="flex flex-col gap-3 border-t border-white/8 pt-3.5"
+                >
+                  <DurationInputGroup
+                    label="Countdown (Combat)"
+                    prefixId="jj-countdown"
+                    value={settings.jujitsuConfig.countdown}
+                    onChange={(next) => {
+                      setPresetError(null);
+                      onChangeJujitsuCountdown(next);
+                    }}
+                  />
+                  <DurationInputGroup
+                    label="Cooldown (Rest)"
+                    prefixId="jj-cooldown"
+                    value={settings.jujitsuConfig.cooldown}
+                    onChange={(next) => {
+                      setPresetError(null);
+                      onChangeJujitsuCooldown(next);
+                    }}
+                  />
+                  <DurationInputGroup
+                    label="Training Time"
+                    prefixId="jj-total"
+                    value={settings.jujitsuConfig.totalDuration}
+                    onChange={(next) => {
+                      setPresetError(null);
+                      onChangeJujitsuTotalDuration(next);
+                    }}
+                  />
+
+                  {/* Start Sound (Round Start & Cooldown Finish Longer Sound) */}
+                  <div className="flex flex-col gap-1.5 border-t border-white/8 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                    <div className="flex flex-col min-w-0">
+                      <label
+                        htmlFor="jj-start-sound-select"
+                        className="text-xs font-medium text-slate-300 whitespace-nowrap"
+                      >
+                        Start Sound
+                      </label>
+                      <span className="text-[11px] text-slate-400">
+                        Round start &amp; cooldown end (long)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 sm:shrink-0">
+                      <select
+                        id="jj-start-sound-select"
+                        aria-label="Start sound"
+                        value={settings.jujitsuConfig.startSoundId}
+                        onChange={(e) => {
+                          setPresetError(null);
+                          onChangeJujitsuStartSound(
+                            e.target.value as JujitsuSoundId
+                          );
+                        }}
+                        className="h-11 min-w-0 flex-1 sm:w-44 sm:flex-none rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+                      >
+                        {JUJITSU_SOUND_OPTIONS.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        id="jj-test-start-sound-btn"
+                        aria-label="Test start sound"
+                        onClick={onTestJujitsuStartSound}
+                        className="h-11 rounded-lg border border-slate-700 bg-slate-800/90 px-3 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white active:scale-95 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        Test
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Stop Sound (Countdown End Double Sound) */}
+                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                    <div className="flex flex-col min-w-0">
+                      <label
+                        htmlFor="jj-stop-sound-select"
+                        className="text-xs font-medium text-slate-300 whitespace-nowrap"
+                      >
+                        Stop Sound
+                      </label>
+                      <span className="text-[11px] text-slate-400">
+                        Countdown end (double sound)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 sm:shrink-0">
+                      <select
+                        id="jj-stop-sound-select"
+                        aria-label="Stop sound"
+                        value={settings.jujitsuConfig.stopSoundId}
+                        onChange={(e) => {
+                          setPresetError(null);
+                          onChangeJujitsuStopSound(
+                            e.target.value as JujitsuSoundId
+                          );
+                        }}
+                        className="h-11 min-w-0 flex-1 sm:w-44 sm:flex-none rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+                      >
+                        {JUJITSU_SOUND_OPTIONS.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        id="jj-test-stop-sound-btn"
+                        aria-label="Test stop sound"
+                        onClick={onTestJujitsuStopSound}
+                        className="h-11 rounded-lg border border-slate-700 bg-slate-800/90 px-3 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white active:scale-95 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        Test
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400">
+                    Loops combat countdown and cooldown rest until total
+                    training time finishes. Final 5s of cooldown flash &amp;
+                    beep each second.
+                  </p>
                 </div>
               )}
 
@@ -1003,8 +1163,8 @@ export function SettingsDrawer({
                   </form>
                 ) : (
                   <p className="text-[11px] text-slate-400">
-                    Select Countdown, Time Until, Interval, Focus Session, or
-                    Alarm Clock mode above to save a preset.
+                    Select Countdown, Time Until, Interval, Jujitsu, Focus
+                    Session, or Alarm Clock mode above to save a preset.
                   </p>
                 )}
               </div>
@@ -1206,6 +1366,9 @@ export function SettingsDrawer({
                   <span>{settings.autoDimEnabled ? 'On' : 'Off'}</span>
                 </button>
               </div>
+
+              {/* Standalone Web App / iPad Home Screen Install Card */}
+              <PWAInstallButton variant="settings" />
 
               {/* Typography & Scale */}
               <div className="flex flex-col gap-3.5 border-t border-white/8 pt-4">

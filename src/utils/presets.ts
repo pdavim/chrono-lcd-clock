@@ -5,6 +5,8 @@ import {
   CountdownTarget,
   FocusConfig,
   IntervalConfig,
+  JujitsuConfig,
+  JujitsuSoundId,
   TimeUntilTarget,
   countdownTargetToMs,
   formatAlarmTimeLabel,
@@ -14,6 +16,7 @@ import {
   sanitizeCountdownTarget,
   sanitizeFocusConfig,
   sanitizeIntervalConfig,
+  sanitizeJujitsuConfig,
   sanitizeTimeUntilTarget,
 } from './time';
 
@@ -44,11 +47,13 @@ export interface SavedTimerPreset {
     | ClockMode.Countdown
     | ClockMode.TimeUntil
     | ClockMode.Interval
+    | ClockMode.Jujitsu
     | ClockMode.FocusSession
     | ClockMode.AlarmClock;
   countdownTarget?: CountdownTarget;
   timeUntilTarget?: TimeUntilTarget;
   intervalConfig?: IntervalConfig;
+  jujitsuConfig?: JujitsuConfig;
   focusConfig?: FocusConfig;
   alarmTime?: Pick<AlarmClockConfig, 'hh' | 'mm' | 'ss'>;
 }
@@ -74,6 +79,19 @@ export const DEFAULT_TIMER_PRESETS: readonly SavedTimerPreset[] = [
       work: { hh: 0, mm: 0, ss: 20 },
       rest: { hh: 0, mm: 0, ss: 10 },
       cycles: 8,
+    },
+  },
+  {
+    id: 'preset-jujitsu',
+    name: 'Jujitsu 5m/1m (15m)',
+    category: PresetCategory.Exercise,
+    mode: ClockMode.Jujitsu,
+    jujitsuConfig: {
+      countdown: { hh: 0, mm: 5, ss: 0 },
+      cooldown: { hh: 0, mm: 1, ss: 0 },
+      totalDuration: { hh: 0, mm: 15, ss: 0 },
+      startSoundId: JujitsuSoundId.DojoBell,
+      stopSoundId: JujitsuSoundId.MatHorn,
     },
   },
   {
@@ -111,7 +129,12 @@ function inferLegacyPresetCategory(
   if (rec.id === 'preset-pomodoro' || rec.mode === ClockMode.FocusSession) {
     return PresetCategory.Work;
   }
-  if (rec.id === 'preset-tabata' || rec.mode === ClockMode.Interval) {
+  if (
+    rec.id === 'preset-tabata' ||
+    rec.id === 'preset-jujitsu' ||
+    rec.mode === ClockMode.Interval ||
+    rec.mode === ClockMode.Jujitsu
+  ) {
     return PresetCategory.Exercise;
   }
   if (rec.id === 'preset-5m') {
@@ -168,6 +191,10 @@ export function formatPresetSummary(preset: SavedTimerPreset): string {
     const { work, rest, cycles } = preset.intervalConfig;
     return `Interval · ${formatCompactDuration(work)} / ${formatCompactDuration(rest)} · ${cycles}x`;
   }
+  if (preset.mode === ClockMode.Jujitsu && preset.jujitsuConfig) {
+    const { countdown, cooldown, totalDuration } = preset.jujitsuConfig;
+    return `Jujitsu · ${formatCompactDuration(countdown)} / ${formatCompactDuration(cooldown)} · ${formatCompactDuration(totalDuration)}`;
+  }
   if (preset.mode === ClockMode.FocusSession && preset.focusConfig) {
     const { work, breakDuration, sessions } = preset.focusConfig;
     return `Focus · ${formatCompactDuration(work)} / ${formatCompactDuration(breakDuration)} · ${sessions}x`;
@@ -190,6 +217,7 @@ export function createTimerPreset(params: {
   countdownTarget: CountdownTarget;
   timeUntilTarget?: TimeUntilTarget;
   intervalConfig: IntervalConfig;
+  jujitsuConfig?: JujitsuConfig;
   focusConfig?: FocusConfig;
   alarmClock?: AlarmClockConfig;
 }): CreatePresetResult {
@@ -202,13 +230,14 @@ export function createTimerPreset(params: {
     params.mode !== ClockMode.Countdown &&
     params.mode !== ClockMode.TimeUntil &&
     params.mode !== ClockMode.Interval &&
+    params.mode !== ClockMode.Jujitsu &&
     params.mode !== ClockMode.FocusSession &&
     params.mode !== ClockMode.AlarmClock
   ) {
     return {
       ok: false,
       error:
-        'Switch to Countdown, Time Until, Interval, Focus Session, or Alarm Clock mode to save a preset.',
+        'Switch to Countdown, Time Until, Interval, Jujitsu, Focus Session, or Alarm Clock mode to save a preset.',
     };
   }
 
@@ -296,6 +325,20 @@ export function createTimerPreset(params: {
     };
   }
 
+  if (params.mode === ClockMode.Jujitsu) {
+    const cleanJujitsu = sanitizeJujitsuConfig(params.jujitsuConfig);
+    return {
+      ok: true,
+      preset: {
+        id: presetId,
+        name: safeName,
+        category: resolvedCategory,
+        mode: ClockMode.Jujitsu,
+        jujitsuConfig: cleanJujitsu,
+      },
+    };
+  }
+
   const cleanInterval = sanitizeIntervalConfig(params.intervalConfig);
   return {
     ok: true,
@@ -332,6 +375,26 @@ export function isPresetMatchingSettings(
       targetsEqual(preset.intervalConfig.work, settings.intervalConfig.work) &&
       targetsEqual(preset.intervalConfig.rest, settings.intervalConfig.rest) &&
       preset.intervalConfig.cycles === settings.intervalConfig.cycles
+    );
+  }
+
+  if (preset.mode === ClockMode.Jujitsu && preset.jujitsuConfig) {
+    return (
+      targetsEqual(
+        preset.jujitsuConfig.countdown,
+        settings.jujitsuConfig.countdown
+      ) &&
+      targetsEqual(
+        preset.jujitsuConfig.cooldown,
+        settings.jujitsuConfig.cooldown
+      ) &&
+      targetsEqual(
+        preset.jujitsuConfig.totalDuration,
+        settings.jujitsuConfig.totalDuration
+      ) &&
+      preset.jujitsuConfig.startSoundId ===
+        settings.jujitsuConfig.startSoundId &&
+      preset.jujitsuConfig.stopSoundId === settings.jujitsuConfig.stopSoundId
     );
   }
 
@@ -401,6 +464,14 @@ export function sanitizePresetsList(raw: unknown): SavedTimerPreset[] {
         category,
         mode: ClockMode.Interval,
         intervalConfig: sanitizeIntervalConfig(rec.intervalConfig),
+      });
+    } else if (rec.mode === ClockMode.Jujitsu && rec.jujitsuConfig) {
+      valid.push({
+        id: rec.id,
+        name: trimmed.slice(0, 36),
+        category,
+        mode: ClockMode.Jujitsu,
+        jujitsuConfig: sanitizeJujitsuConfig(rec.jujitsuConfig),
       });
     } else if (rec.mode === ClockMode.FocusSession && rec.focusConfig) {
       valid.push({

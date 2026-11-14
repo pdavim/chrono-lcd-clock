@@ -33,6 +33,9 @@ import {
 } from './utils/solar';
 import {
   playCompletionAlarm,
+  playJujitsuCooldownTickSound,
+  playJujitsuStartSound,
+  playJujitsuStopDoubleSound,
   playMechanicalTickTock,
   playRestStartCue,
   playWorkStartCue,
@@ -55,12 +58,16 @@ import {
   FontOptionId,
   IntervalPhase,
   IntervalState,
+  JujitsuPhase,
+  JujitsuSoundId,
+  JujitsuState,
   LiveClockTimezone,
   TimeFieldKey,
   TimeUntilTarget,
   countdownTargetToMs,
   createInitialFocusState,
   createInitialIntervalState,
+  createInitialJujitsuState,
   estimateDisplayWidthEm,
   evaluateAlarmClockTick,
   evaluateClockTap,
@@ -74,10 +81,12 @@ import {
   sanitizeCountdownTarget,
   sanitizeFocusConfig,
   sanitizeIntervalConfig,
+  sanitizeJujitsuConfig,
   sanitizeTimeUntilTarget,
   shouldAutoDimDisplay,
   stepFocusState,
   stepIntervalState,
+  stepJujitsuState,
   toggleVisibleField,
 } from './utils/time';
 
@@ -146,6 +155,9 @@ function loadSavedSettings(): ClockSettings {
       ),
       intervalConfig: sanitizeIntervalConfig(
         parsed.intervalConfig ?? DEFAULT_SETTINGS.intervalConfig
+      ),
+      jujitsuConfig: sanitizeJujitsuConfig(
+        parsed.jujitsuConfig ?? DEFAULT_SETTINGS.jujitsuConfig
       ),
       focusConfig: sanitizeFocusConfig(
         parsed.focusConfig ?? DEFAULT_SETTINGS.focusConfig
@@ -266,6 +278,9 @@ export default function App() {
   const [intervalState, setIntervalState] = useState<IntervalState>(() =>
     createInitialIntervalState(settings.intervalConfig)
   );
+  const [jujitsuState, setJujitsuState] = useState<JujitsuState>(() =>
+    createInitialJujitsuState(settings.jujitsuConfig)
+  );
   const [focusState, setFocusState] = useState<FocusState>(() =>
     createInitialFocusState(settings.focusConfig)
   );
@@ -320,6 +335,9 @@ export default function App() {
 
   const intervalStateRef = useRef<IntervalState>(intervalState);
   intervalStateRef.current = intervalState;
+  const jujitsuStateRef = useRef<JujitsuState>(jujitsuState);
+  jujitsuStateRef.current = jujitsuState;
+  const jujitsuLastTotalSecondRef = useRef<number>(-1);
   const focusStateRef = useRef<FocusState>(focusState);
   focusStateRef.current = focusState;
   const lastFrameTimeRef = useRef<number>(0);
@@ -514,6 +532,11 @@ export default function App() {
     root.style.setProperty('--clock-font-style', fontDef.italic ? 'italic' : 'normal');
     root.style.setProperty('--clock-size-vw', String(settings.clockSizeVw));
     root.style.setProperty('--clock-width-em', String(widthEm));
+
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) {
+      themeMeta.setAttribute('content', scheduledTheme.activeBgColor);
+    }
   }, [
     scheduledTheme.activeClockColor,
     scheduledTheme.activeBgColor,
@@ -527,7 +550,8 @@ export default function App() {
     (
       currentSettings: ClockSettings,
       currentInterval: IntervalState,
-      currentFocus: FocusState
+      currentFocus: FocusState,
+      currentJujitsu: JujitsuState = jujitsuStateRef.current
     ): string => {
       if (currentSettings.mode === ClockMode.LiveClock) {
         return formatLiveClockDate(
@@ -561,6 +585,12 @@ export default function App() {
           currentSettings.visibleFields
         );
       }
+      if (currentSettings.mode === ClockMode.Jujitsu) {
+        return formatDurationMs(
+          currentJujitsu.remainingMs,
+          currentSettings.visibleFields
+        );
+      }
       if (currentSettings.mode === ClockMode.FocusSession) {
         return formatDurationMs(
           currentFocus.remainingMs,
@@ -579,13 +609,15 @@ export default function App() {
     (
       nextSettings = settingsRef.current,
       nextInterval = intervalStateRef.current,
-      nextFocus = focusStateRef.current
+      nextFocus = focusStateRef.current,
+      nextJujitsu = jujitsuStateRef.current
     ) => {
       if (displayRef.current) {
         displayRef.current.textContent = getStaticDisplayText(
           nextSettings,
           nextInterval,
-          nextFocus
+          nextFocus,
+          nextJujitsu
         );
       }
     },
@@ -599,9 +631,16 @@ export default function App() {
       settings.mode !== ClockMode.LiveClock &&
       settings.mode !== ClockMode.AlarmClock
     ) {
-      syncDomDisplay(settings, intervalState, focusState);
+      syncDomDisplay(settings, intervalState, focusState, jujitsuState);
     }
-  }, [settings, intervalState, focusState, isRunning, syncDomDisplay]);
+  }, [
+    settings,
+    intervalState,
+    focusState,
+    jujitsuState,
+    isRunning,
+    syncDomDisplay,
+  ]);
 
   // Update DD/MM/YYYY Calendar Date cleanly when enabled (including midnight rollover & UTC Live Clock)
   useEffect(() => {
@@ -1010,6 +1049,138 @@ export default function App() {
       return () => window.cancelAnimationFrame(frameId);
     }
 
+    if (settings.mode === ClockMode.Jujitsu) {
+      lastFrameTimeRef.current = performance.now();
+      jujitsuLastTotalSecondRef.current = Math.ceil(
+        jujitsuStateRef.current.totalRemainingMs / 1000
+      );
+
+      const tickJujitsu = () => {
+        if (!isRunningRef.current) return;
+        const now = performance.now();
+        const deltaMs = Math.max(0, now - lastFrameTimeRef.current);
+        lastFrameTimeRef.current = now;
+
+        const { nextState, events } = stepJujitsuState(
+          jujitsuStateRef.current,
+          settingsRef.current.jujitsuConfig,
+          deltaMs
+        );
+
+        jujitsuStateRef.current = nextState;
+
+        if (displayRef.current) {
+          displayRef.current.textContent = formatDurationMs(
+            nextState.remainingMs,
+            settingsRef.current.visibleFields
+          );
+        }
+
+        const totalSecCeil = Math.ceil(nextState.totalRemainingMs / 1000);
+        if (
+          events.length > 0 ||
+          totalSecCeil !== jujitsuLastTotalSecondRef.current
+        ) {
+          jujitsuLastTotalSecondRef.current = totalSecCeil;
+          setJujitsuState(nextState);
+        }
+
+        if (events.length > 0) {
+          const completedEvt = events.find(
+            (evt): evt is Extract<typeof evt, { type: 'training-completed' }> =>
+              evt.type === 'training-completed'
+          );
+          const hasCooldownEnded = events.some(
+            (evt) => evt.type === 'cooldown-ended'
+          );
+          const hasCountdownEnded = events.some(
+            (evt) => evt.type === 'countdown-ended'
+          );
+          const warningEvents = events.filter(
+            (
+              evt
+            ): evt is Extract<
+              typeof evt,
+              { type: 'cooldown-warning-second' }
+            > => evt.type === 'cooldown-warning-second'
+          );
+
+          if (completedEvt) {
+            isRunningRef.current = false;
+            setIsRunning(false);
+            setIsAlarmBlinking(true);
+            setIsAutoDimmed(false);
+            setPhaseFlashKey((k) => k + 1);
+            if (settingsRef.current.visualFlashEnabled) {
+              setBgFlashEvent((prev) => ({
+                key: (prev?.key ?? 0) + 1,
+                kind: 'complete',
+              }));
+            }
+            if (completedEvt.endedFrom === 'countdown') {
+              playJujitsuStopDoubleSound(
+                settingsRef.current.alarmSoundEnabled,
+                settingsRef.current.jujitsuConfig.stopSoundId
+              );
+            } else {
+              playJujitsuStartSound(
+                settingsRef.current.alarmSoundEnabled,
+                settingsRef.current.jujitsuConfig.startSoundId
+              );
+            }
+            triggerVibration(settingsRef.current.vibrationEnabled, 'complete');
+            return;
+          }
+
+          if (hasCooldownEnded) {
+            setPhaseFlashKey((k) => k + 1);
+            if (settingsRef.current.visualFlashEnabled) {
+              setBgFlashEvent((prev) => ({
+                key: (prev?.key ?? 0) + 1,
+                kind: 'phase',
+              }));
+            }
+            playJujitsuStartSound(
+              settingsRef.current.alarmSoundEnabled,
+              settingsRef.current.jujitsuConfig.startSoundId
+            );
+            triggerVibration(settingsRef.current.vibrationEnabled, 'phase');
+          } else if (hasCountdownEnded) {
+            setPhaseFlashKey((k) => k + 1);
+            if (settingsRef.current.visualFlashEnabled) {
+              setBgFlashEvent((prev) => ({
+                key: (prev?.key ?? 0) + 1,
+                kind: 'phase',
+              }));
+            }
+            playJujitsuStopDoubleSound(
+              settingsRef.current.alarmSoundEnabled,
+              settingsRef.current.jujitsuConfig.stopSoundId
+            );
+            triggerVibration(settingsRef.current.vibrationEnabled, 'phase');
+          } else if (warningEvents.length > 0) {
+            const latestWarning = warningEvents[warningEvents.length - 1];
+            setPhaseFlashKey((k) => k + 1);
+            if (settingsRef.current.visualFlashEnabled) {
+              setBgFlashEvent((prev) => ({
+                key: (prev?.key ?? 0) + 1,
+                kind: 'tick',
+              }));
+            }
+            playJujitsuCooldownTickSound(
+              settingsRef.current.alarmSoundEnabled,
+              latestWarning.second
+            );
+          }
+        }
+
+        frameId = window.requestAnimationFrame(tickJujitsu);
+      };
+
+      frameId = window.requestAnimationFrame(tickJujitsu);
+      return () => window.cancelAnimationFrame(frameId);
+    }
+
     if (settings.mode === ClockMode.FocusSession) {
       lastFrameTimeRef.current = performance.now();
 
@@ -1135,6 +1306,32 @@ export default function App() {
           lastFrameTimeRef.current = performance.now();
           isRunningRef.current = true;
           setIsRunning(true);
+        } else if (currentMode === ClockMode.Jujitsu) {
+          let activeJujitsu = jujitsuStateRef.current;
+          if (
+            activeJujitsu.phase === JujitsuPhase.Completed ||
+            activeJujitsu.totalRemainingMs <= 0 ||
+            activeJujitsu.remainingMs <= 0
+          ) {
+            activeJujitsu = createInitialJujitsuState(
+              settingsRef.current.jujitsuConfig
+            );
+            jujitsuStateRef.current = activeJujitsu;
+            setJujitsuState(activeJujitsu);
+          }
+          const isFreshSessionStart =
+            activeJujitsu.round === 1 &&
+            activeJujitsu.phase === JujitsuPhase.Countdown &&
+            activeJujitsu.totalRemainingMs === activeJujitsu.totalDurationMs;
+          lastFrameTimeRef.current = performance.now();
+          isRunningRef.current = true;
+          setIsRunning(true);
+          if (isFreshSessionStart) {
+            playJujitsuStartSound(
+              settingsRef.current.alarmSoundEnabled,
+              settingsRef.current.jujitsuConfig.startSoundId
+            );
+          }
         } else if (currentMode === ClockMode.FocusSession) {
           let activeFocus = focusStateRef.current;
           if (
@@ -1157,6 +1354,8 @@ export default function App() {
         setIsRunning(false);
         if (currentMode === ClockMode.Interval) {
           setIntervalState({ ...intervalStateRef.current });
+        } else if (currentMode === ClockMode.Jujitsu) {
+          setJujitsuState({ ...jujitsuStateRef.current });
         } else if (currentMode === ClockMode.FocusSession) {
           setFocusState({ ...focusStateRef.current });
         }
@@ -1207,12 +1406,34 @@ export default function App() {
         const fresh = createInitialIntervalState(currentSettings.intervalConfig);
         intervalStateRef.current = fresh;
         setIntervalState(fresh);
-        syncDomDisplay(currentSettings, fresh, focusStateRef.current);
+        syncDomDisplay(
+          currentSettings,
+          fresh,
+          focusStateRef.current,
+          jujitsuStateRef.current
+        );
+      } else if (currentSettings.mode === ClockMode.Jujitsu) {
+        const freshJujitsu = createInitialJujitsuState(
+          currentSettings.jujitsuConfig
+        );
+        jujitsuStateRef.current = freshJujitsu;
+        setJujitsuState(freshJujitsu);
+        syncDomDisplay(
+          currentSettings,
+          intervalStateRef.current,
+          focusStateRef.current,
+          freshJujitsu
+        );
       } else if (currentSettings.mode === ClockMode.FocusSession) {
         const freshFocus = createInitialFocusState(currentSettings.focusConfig);
         focusStateRef.current = freshFocus;
         setFocusState(freshFocus);
-        syncDomDisplay(currentSettings, intervalStateRef.current, freshFocus);
+        syncDomDisplay(
+          currentSettings,
+          intervalStateRef.current,
+          freshFocus,
+          jujitsuStateRef.current
+        );
       } else if (currentSettings.mode === ClockMode.Stopwatch) {
         stopwatchElapsedRef.current = 0;
         syncDomDisplay(
@@ -1223,6 +1444,67 @@ export default function App() {
       }
     },
     [syncDomDisplay]
+  );
+
+  const handleQuickStartJujitsu = useCallback(
+    (e?: React.MouseEvent<HTMLButtonElement>) => {
+      e?.stopPropagation();
+      clearPendingSingleTap();
+      unlockAudioContext();
+      stopAlarmSound();
+      if (
+        isAlarmClockRingingRef.current &&
+        settingsRef.current.media.alarmWakeMode === AlarmWakeMode.Media
+      ) {
+        issueMediaCommand('pause');
+      }
+      isAlarmClockRingingRef.current = false;
+      setIsAlarmClockRinging(false);
+      setIsAlarmBlinking(false);
+      setIsAutoDimmed(false);
+
+      const cleanConfig = sanitizeJujitsuConfig(
+        settingsRef.current.jujitsuConfig
+      );
+      const freshJujitsu = createInitialJujitsuState(cleanConfig);
+      jujitsuStateRef.current = freshJujitsu;
+      jujitsuLastTotalSecondRef.current = Math.ceil(
+        freshJujitsu.totalRemainingMs / 1000
+      );
+      setJujitsuState(freshJujitsu);
+
+      const nextSettings: ClockSettings = {
+        ...settingsRef.current,
+        mode: ClockMode.Jujitsu,
+        jujitsuConfig: cleanConfig,
+      };
+      settingsRef.current = nextSettings;
+      setSettings(nextSettings);
+
+      syncDomDisplay(
+        nextSettings,
+        intervalStateRef.current,
+        focusStateRef.current,
+        freshJujitsu
+      );
+
+      lastFrameTimeRef.current = performance.now();
+      isRunningRef.current = true;
+      setIsRunning(true);
+      setPhaseFlashKey((k) => k + 1);
+      if (nextSettings.visualFlashEnabled) {
+        setBgFlashEvent((prev) => ({
+          key: (prev?.key ?? 0) + 1,
+          kind: 'phase',
+        }));
+      }
+      playJujitsuStartSound(
+        nextSettings.alarmSoundEnabled,
+        cleanConfig.startSoundId
+      );
+      requestScreenWakeLock();
+    },
+    [clearPendingSingleTap, issueMediaCommand, syncDomDisplay]
   );
 
   const handleStopRingingAlarm = useCallback(
@@ -1491,6 +1773,10 @@ export default function App() {
       const fresh = createInitialIntervalState(settings.intervalConfig);
       intervalStateRef.current = fresh;
       setIntervalState(fresh);
+    } else if (mode === ClockMode.Jujitsu) {
+      const freshJujitsu = createInitialJujitsuState(settings.jujitsuConfig);
+      jujitsuStateRef.current = freshJujitsu;
+      setJujitsuState(freshJujitsu);
     } else if (mode === ClockMode.FocusSession) {
       const freshFocus = createInitialFocusState(settings.focusConfig);
       focusStateRef.current = freshFocus;
@@ -1598,6 +1884,94 @@ export default function App() {
       intervalStateRef.current = updated;
       setIntervalState(updated);
     }
+  };
+
+  const handleChangeJujitsuCountdown = (rawCountdown: CountdownTarget) => {
+    const cleanConfig = sanitizeJujitsuConfig({
+      ...settings.jujitsuConfig,
+      countdown: rawCountdown,
+    });
+    setSettings((prev) => ({ ...prev, jujitsuConfig: cleanConfig }));
+    if (
+      !isRunningRef.current &&
+      settingsRef.current.mode === ClockMode.Jujitsu
+    ) {
+      const fresh = createInitialJujitsuState(cleanConfig);
+      jujitsuStateRef.current = fresh;
+      setJujitsuState(fresh);
+      setIsAlarmBlinking(false);
+    }
+  };
+
+  const handleChangeJujitsuCooldown = (rawCooldown: CountdownTarget) => {
+    const cleanConfig = sanitizeJujitsuConfig({
+      ...settings.jujitsuConfig,
+      cooldown: rawCooldown,
+    });
+    setSettings((prev) => ({ ...prev, jujitsuConfig: cleanConfig }));
+    if (
+      !isRunningRef.current &&
+      settingsRef.current.mode === ClockMode.Jujitsu
+    ) {
+      const fresh = createInitialJujitsuState(cleanConfig);
+      jujitsuStateRef.current = fresh;
+      setJujitsuState(fresh);
+      setIsAlarmBlinking(false);
+    }
+  };
+
+  const handleChangeJujitsuTotalDuration = (rawTotal: CountdownTarget) => {
+    const cleanConfig = sanitizeJujitsuConfig({
+      ...settings.jujitsuConfig,
+      totalDuration: rawTotal,
+    });
+    setSettings((prev) => ({ ...prev, jujitsuConfig: cleanConfig }));
+    if (
+      !isRunningRef.current &&
+      settingsRef.current.mode === ClockMode.Jujitsu
+    ) {
+      const fresh = createInitialJujitsuState(cleanConfig);
+      jujitsuStateRef.current = fresh;
+      setJujitsuState(fresh);
+      setIsAlarmBlinking(false);
+    }
+  };
+
+  const handleChangeJujitsuStartSound = (startSoundId: JujitsuSoundId) => {
+    unlockAudioContext();
+    const cleanConfig = sanitizeJujitsuConfig({
+      ...settings.jujitsuConfig,
+      startSoundId,
+    });
+    setSettings((prev) => ({ ...prev, jujitsuConfig: cleanConfig }));
+    if (settingsRef.current.alarmSoundEnabled) {
+      playJujitsuStartSound(true, cleanConfig.startSoundId);
+    }
+  };
+
+  const handleTestJujitsuStartSound = () => {
+    unlockAudioContext();
+    playJujitsuStartSound(true, settingsRef.current.jujitsuConfig.startSoundId);
+  };
+
+  const handleChangeJujitsuStopSound = (stopSoundId: JujitsuSoundId) => {
+    unlockAudioContext();
+    const cleanConfig = sanitizeJujitsuConfig({
+      ...settings.jujitsuConfig,
+      stopSoundId,
+    });
+    setSettings((prev) => ({ ...prev, jujitsuConfig: cleanConfig }));
+    if (settingsRef.current.alarmSoundEnabled) {
+      playJujitsuStopDoubleSound(true, cleanConfig.stopSoundId);
+    }
+  };
+
+  const handleTestJujitsuStopSound = () => {
+    unlockAudioContext();
+    playJujitsuStopDoubleSound(
+      true,
+      settingsRef.current.jujitsuConfig.stopSoundId
+    );
   };
 
   const handleChangeFocusWork = (rawWork: CountdownTarget) => {
@@ -1792,6 +2166,7 @@ export default function App() {
       countdownTarget: settings.countdownTarget,
       timeUntilTarget: settings.timeUntilTarget,
       intervalConfig: settings.intervalConfig,
+      jujitsuConfig: settings.jujitsuConfig,
       focusConfig: settings.focusConfig,
       alarmClock: settings.alarmClock,
     });
@@ -1849,6 +2224,16 @@ export default function App() {
         ...prev,
         mode: ClockMode.Interval,
         intervalConfig: cleanInterval,
+      }));
+    } else if (preset.mode === ClockMode.Jujitsu && preset.jujitsuConfig) {
+      const cleanJujitsu = sanitizeJujitsuConfig(preset.jujitsuConfig);
+      const freshJujitsu = createInitialJujitsuState(cleanJujitsu);
+      jujitsuStateRef.current = freshJujitsu;
+      setJujitsuState(freshJujitsu);
+      setSettings((prev) => ({
+        ...prev,
+        mode: ClockMode.Jujitsu,
+        jujitsuConfig: cleanJujitsu,
       }));
     } else if (preset.mode === ClockMode.FocusSession && preset.focusConfig) {
       const cleanFocus = sanitizeFocusConfig(preset.focusConfig);
@@ -1982,7 +2367,8 @@ export default function App() {
   const initialDisplayText = getStaticDisplayText(
     settings,
     intervalState,
-    focusState
+    focusState,
+    jujitsuState
   );
 
   return (
@@ -2025,6 +2411,8 @@ export default function App() {
       <CornerControls
         mode={settings.mode}
         showBatteryLevel={settings.showBatteryLevel}
+        showRadioControl={settings.showRadioControl}
+        jujitsuConfig={settings.jujitsuConfig}
         isRunning={isRunning}
         isAlarmArmed={settings.alarmClock.enabled}
         isAlarmRinging={isAlarmClockRinging}
@@ -2035,6 +2423,7 @@ export default function App() {
         isAutoDimmed={isAutoDimmed}
         onToggleStartPause={handleToggleStartPause}
         onReset={handleReset}
+        onQuickStartJujitsu={handleQuickStartJujitsu}
         onToggleAlarmArmed={handleToggleAlarmClockArmed}
         onCancelSnooze={handleCancelSnooze}
         onToggleFullscreen={handleToggleFullscreen}
@@ -2101,6 +2490,13 @@ export default function App() {
         onChangeIntervalWork={handleChangeIntervalWork}
         onChangeIntervalRest={handleChangeIntervalRest}
         onChangeIntervalCycles={handleChangeIntervalCycles}
+        onChangeJujitsuCountdown={handleChangeJujitsuCountdown}
+        onChangeJujitsuCooldown={handleChangeJujitsuCooldown}
+        onChangeJujitsuTotalDuration={handleChangeJujitsuTotalDuration}
+        onChangeJujitsuStartSound={handleChangeJujitsuStartSound}
+        onTestJujitsuStartSound={handleTestJujitsuStartSound}
+        onChangeJujitsuStopSound={handleChangeJujitsuStopSound}
+        onTestJujitsuStopSound={handleTestJujitsuStopSound}
         onChangeFocusWork={handleChangeFocusWork}
         onChangeFocusBreak={handleChangeFocusBreak}
         onChangeFocusSessions={handleChangeFocusSessions}
@@ -2156,6 +2552,7 @@ export default function App() {
         sessionElapsedText={sessionElapsedText}
         isAutoDimmed={isAutoDimmed}
         intervalState={intervalState}
+        jujitsuState={jujitsuState}
         focusState={focusState}
         alarmClock={settings.alarmClock}
         timeUntilTarget={settings.timeUntilTarget}

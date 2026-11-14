@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ClockMode, DEFAULT_SETTINGS } from './time';
+import { ClockMode, DEFAULT_SETTINGS, JujitsuSoundId } from './time';
 import {
   DEFAULT_TIMER_PRESETS,
   PresetCategory,
@@ -220,6 +220,52 @@ test('groupPresetsByCategory organizes presets into Work, Exercise, Meditation, 
     assert.equal(updatedGroups[0].items.length, 2);
   }
 });
+
+test('createTimerPreset saves, matches, and sanitizes Jujitsu combat presets', () => {
+  const jjRes = createTimerPreset({
+    id: 'jj-kumite',
+    name: 'Kumite 3m/1m (15m)',
+    category: PresetCategory.Exercise,
+    mode: ClockMode.Jujitsu,
+    countdownTarget: DEFAULT_SETTINGS.countdownTarget,
+    intervalConfig: DEFAULT_SETTINGS.intervalConfig,
+    jujitsuConfig: {
+      countdown: { hh: 0, mm: 3, ss: 0 },
+      cooldown: { hh: 0, mm: 1, ss: 0 },
+      totalDuration: { hh: 0, mm: 15, ss: 0 },
+      startSoundId: JujitsuSoundId.TatamiGong,
+      stopSoundId: JujitsuSoundId.MatHorn,
+    },
+  });
+
+  assert.equal(jjRes.ok, true);
+  if (jjRes.ok) {
+    assert.equal(jjRes.preset.category, PresetCategory.Exercise);
+    assert.equal(
+      formatPresetSummary(jjRes.preset),
+      'Jujitsu · 03:00 / 01:00 · 15:00'
+    );
+    assert.equal(
+      isPresetMatchingSettings(jjRes.preset, {
+        ...DEFAULT_SETTINGS,
+        mode: ClockMode.Jujitsu,
+        jujitsuConfig: {
+          countdown: { hh: 0, mm: 3, ss: 0 },
+          cooldown: { hh: 0, mm: 1, ss: 0 },
+          totalDuration: { hh: 0, mm: 15, ss: 0 },
+          startSoundId: JujitsuSoundId.TatamiGong,
+          stopSoundId: JujitsuSoundId.MatHorn,
+        },
+      }),
+      true
+    );
+
+    const sanitized = sanitizePresetsList([jjRes.preset]);
+    assert.equal(sanitized.length, 1);
+    assert.equal(sanitized[0].mode, ClockMode.Jujitsu);
+  }
+});
+
 
 
 

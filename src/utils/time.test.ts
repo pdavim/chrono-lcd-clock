@@ -9,6 +9,9 @@ import {
   FocusPhase,
   FontOptionId,
   IntervalPhase,
+  JUJITSU_SOUND_OPTIONS,
+  JujitsuPhase,
+  JujitsuSoundId,
   LiveClockTimezone,
   advanceFocusPhase,
   advanceIntervalPhase,
@@ -18,6 +21,7 @@ import {
   countdownTargetToMs,
   createInitialFocusState,
   createInitialIntervalState,
+  createInitialJujitsuState,
   decomposeDurationMs,
   estimateDisplayWidthEm,
   evaluateAlarmClockTick,
@@ -34,11 +38,14 @@ import {
   sanitizeCountdownTarget,
   sanitizeFocusConfig,
   sanitizeIntervalConfig,
+  sanitizeJujitsuConfig,
   sanitizeTimeUntilTarget,
   shouldAutoDimDisplay,
+  shouldShowJujitsuQuickStart,
   shouldShowRadioControlBar,
   stepFocusState,
   stepIntervalState,
+  stepJujitsuState,
   toggleVisibleField,
 } from './time';
 
@@ -595,6 +602,180 @@ test('TimeUntil mode calculates exact remaining ms for same-day and next-day fut
     24 * 3600 * 1000
   );
 });
+
+test('Jujitsu mode defaults to 15m total training time and loops Countdown/Cooldown until total time fills', () => {
+  assert.equal(ClockMode.Jujitsu, 'jujitsu');
+  assert.equal(JUJITSU_SOUND_OPTIONS.length, 5);
+  assert.deepEqual(DEFAULT_SETTINGS.jujitsuConfig, {
+    countdown: { hh: 0, mm: 5, ss: 0 },
+    cooldown: { hh: 0, mm: 1, ss: 0 },
+    totalDuration: { hh: 0, mm: 15, ss: 0 },
+    startSoundId: JujitsuSoundId.DojoBell,
+    stopSoundId: JujitsuSoundId.MatHorn,
+  });
+
+  // Verify default 15m session: 5m countdown + 1m cooldown + 5m countdown + 1m cooldown + 3m final countdown = 15m
+  const defaultInit = createInitialJujitsuState(DEFAULT_SETTINGS.jujitsuConfig);
+  assert.equal(defaultInit.phase, JujitsuPhase.Countdown);
+  assert.equal(defaultInit.round, 1);
+  assert.equal(defaultInit.remainingMs, 5 * 60_000);
+  assert.equal(defaultInit.totalRemainingMs, 15 * 60_000);
+
+  // Step 12 minutes (2 full rounds of 5m+1m) -> enters Round 3 with 3m capped countdown
+  const after12m = stepJujitsuState(
+    defaultInit,
+    DEFAULT_SETTINGS.jujitsuConfig,
+    12 * 60_000
+  );
+  assert.equal(after12m.nextState.phase, JujitsuPhase.Countdown);
+  assert.equal(after12m.nextState.round, 3);
+  assert.equal(after12m.nextState.remainingMs, 3 * 60_000);
+  assert.equal(after12m.nextState.totalRemainingMs, 3 * 60_000);
+
+  // Step remaining 3 minutes -> completes total training session cleanly
+  const after15m = stepJujitsuState(
+    after12m.nextState,
+    DEFAULT_SETTINGS.jujitsuConfig,
+    3 * 60_000
+  );
+  assert.equal(after15m.nextState.phase, JujitsuPhase.Completed);
+  assert.equal(after15m.nextState.remainingMs, 0);
+  assert.equal(after15m.nextState.totalRemainingMs, 0);
+  assert.deepEqual(after15m.events, [
+    { type: 'countdown-ended' },
+    { type: 'training-completed', endedFrom: 'countdown' },
+  ]);
+});
+
+test('Jujitsu Cooldown emits exact last-5-seconds warning events (5, 4, 3, 2, 1) and cooldown-ended', () => {
+  const config = sanitizeJujitsuConfig({
+    countdown: { hh: 0, mm: 0, ss: 4 },
+    cooldown: { hh: 0, mm: 0, ss: 7 },
+    totalDuration: { hh: 0, mm: 0, ss: 14 },
+    startSoundId: JujitsuSoundId.TatamiGong,
+    stopSoundId: JujitsuSoundId.ArcadeFight,
+  });
+
+  let state = createInitialJujitsuState(config);
+
+  // Finish 4s Countdown -> enters 7s Cooldown
+  const r1End = stepJujitsuState(state, config, 4000);
+  assert.deepEqual(r1End.events, [{ type: 'countdown-ended' }]);
+  assert.equal(r1End.nextState.phase, JujitsuPhase.Cooldown);
+  assert.equal(r1End.nextState.remainingMs, 7000);
+  state = r1End.nextState;
+
+  // Advance 1.5s into Cooldown (5500ms left) -> no last-5s cue yet
+  const beforeLast5 = stepJujitsuState(state, config, 1500);
+  assert.deepEqual(beforeLast5.events, []);
+  state = beforeLast5.nextState;
+
+  // Step 1 second at a time across 5500 -> 4500 -> 3500 -> 2500 -> 1500 -> 500ms
+  const observedWarnings: number[] = [];
+  for (let i = 0; i < 5; i += 1) {
+    const tick = stepJujitsuState(state, config, 1000);
+    assert.equal(tick.events.length, 1);
+    assert.equal(tick.events[0].type, 'cooldown-warning-second');
+    if (tick.events[0].type === 'cooldown-warning-second') {
+      observedWarnings.push(tick.events[0].second);
+    }
+    state = tick.nextState;
+  }
+  assert.deepEqual(observedWarnings, [5, 4, 3, 2, 1]);
+
+  // Finish final 500ms of Cooldown -> emits cooldown-ended + countdown-started (Round 2, 3s left in 14s total)
+  const cooldownDone = stepJujitsuState(state, config, 500);
+  assert.deepEqual(cooldownDone.events, [
+    { type: 'cooldown-ended' },
+    { type: 'countdown-started', round: 2 },
+  ]);
+  assert.equal(cooldownDone.nextState.phase, JujitsuPhase.Countdown);
+  assert.equal(cooldownDone.nextState.round, 2);
+  assert.equal(cooldownDone.nextState.remainingMs, 3000);
+  assert.equal(cooldownDone.nextState.totalRemainingMs, 3000);
+});
+
+test('shouldShowJujitsuQuickStart shows in idle/other modes and hides during active Jujitsu, UI hide, settings, or ringing alarm', () => {
+  // Visible on initial Stopwatch mode (even if Stopwatch is running)
+  assert.equal(
+    shouldShowJujitsuQuickStart({
+      mode: ClockMode.Stopwatch,
+      isRunning: false,
+      isUiHidden: false,
+      isSettingsOpen: false,
+      isAlarmRinging: false,
+    }),
+    true
+  );
+  assert.equal(
+    shouldShowJujitsuQuickStart({
+      mode: ClockMode.Stopwatch,
+      isRunning: true,
+      isUiHidden: false,
+      isSettingsOpen: false,
+      isAlarmRinging: false,
+    }),
+    true
+  );
+
+  // Visible in Jujitsu mode when paused / ready / completed
+  assert.equal(
+    shouldShowJujitsuQuickStart({
+      mode: ClockMode.Jujitsu,
+      isRunning: false,
+      isUiHidden: false,
+      isSettingsOpen: false,
+      isAlarmRinging: false,
+    }),
+    true
+  );
+
+  // Hidden while Jujitsu session is actively running
+  assert.equal(
+    shouldShowJujitsuQuickStart({
+      mode: ClockMode.Jujitsu,
+      isRunning: true,
+      isUiHidden: false,
+      isSettingsOpen: false,
+      isAlarmRinging: false,
+    }),
+    false
+  );
+
+  // Hidden when UI is hidden, settings drawer is open, or alarm clock is ringing
+  assert.equal(
+    shouldShowJujitsuQuickStart({
+      mode: ClockMode.Stopwatch,
+      isRunning: false,
+      isUiHidden: true,
+      isSettingsOpen: false,
+      isAlarmRinging: false,
+    }),
+    false
+  );
+  assert.equal(
+    shouldShowJujitsuQuickStart({
+      mode: ClockMode.LiveClock,
+      isRunning: false,
+      isUiHidden: false,
+      isSettingsOpen: true,
+      isAlarmRinging: false,
+    }),
+    false
+  );
+  assert.equal(
+    shouldShowJujitsuQuickStart({
+      mode: ClockMode.AlarmClock,
+      isRunning: false,
+      isUiHidden: false,
+      isSettingsOpen: false,
+      isAlarmRinging: true,
+    }),
+    false
+  );
+});
+
+
 
 
 

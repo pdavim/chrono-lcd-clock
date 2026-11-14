@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Chrono80 LCD Timer">
+  <rect width="64" height="64" rx="14" fill="#0b0f12" />
+  <rect x="4" y="4" width="56" height="56" rx="10" fill="#0e1419" stroke="#1e293b" stroke-width="2" />
+  <!-- Ghost unlit 7-segment backdrop -->
+  <g fill="#38ff9c" fill-opacity="0.12">
+    <!-- Left digit 8 -->
+    <polygon points="14,15 26,15 24,18 16,18" />
+    <polygon points="13,16 16,19 16,29 13,31" />
+    <polygon points="27,16 27,31 24,29 24,19" />
+    <polygon points="15,30.5 25,30.5 26.5,32 25,33.5 15,33.5 13.5,32" />
+    <polygon points="13,33 16,35 16,45 13,48" />
+    <polygon points="27,33 27,48 24,45 24,35" />
+    <polygon points="16,46 24,46 26,49 14,49" />
+    <!-- Right digit 8 -->
+    <polygon points="38,15 50,15 48,18 40,18" />
+    <polygon points="37,16 40,19 40,29 37,31" />
+    <polygon points="51,16 51,31 48,29 48,19" />
+    <polygon points="39,30.5 49,30.5 50.5,32 49,33.5 39,33.5 37.5,32" />
+    <polygon points="37,33 40,35 40,45 37,48" />
+    <polygon points="51,33 51,48 48,45 48,35" />
+    <polygon points="40,46 48,46 50,49 38,49" />
+  </g>
+  <!-- Lit Indiglo 7-segment "80" + colon -->
+  <g fill="#38ff9c">
+    <!-- Digit 8 -->
+    <polygon points="14,15 26,15 24,18 16,18" />
+    <polygon points="13,16 16,19 16,29 13,31" />
+    <polygon points="27,16 27,31 24,29 24,19" />
+    <polygon points="15,30.5 25,30.5 26.5,32 25,33.5 15,33.5 13.5,32" />
+    <polygon points="13,33 16,35 16,45 13,48" />
+    <polygon points="27,33 27,48 24,45 24,35" />
+    <polygon points="16,46 24,46 26,49 14,49" />
+    <!-- Colon -->
+    <circle cx="32" cy="25" r="2" />
+    <circle cx="32" cy="39" r="2" />
+    <!-- Digit 0 -->
+    <polygon points="38,15 50,15 48,18 40,18" />
+    <polygon points="37,16 40,19 40,29 37,31" />
+    <polygon points="51,16 51,31 48,29 48,19" />
+    <polygon points="37,33 40,35 40,45 37,48" />
+    <polygon points="51,33 51,48 48,45 48,35" />
+    <polygon points="40,46 48,46 50,49 38,49" />
+  </g>
+</svg>

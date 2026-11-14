@@ -25,18 +25,71 @@
     margin: 0;
     padding: 0;
     overflow: hidden;
+    overscroll-behavior: none;
     background-color: var(--clock-bg);
     color: var(--clock-color);
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  button,
+  a,
+  select,
+  input,
+  [role='button'],
+  [role='tab'],
+  [role='switch'] {
+    touch-action: manipulation;
+  }
+
+  input,
+  textarea {
+    -webkit-user-select: text;
+    user-select: text;
   }
 }
 
 .clock-canvas {
   background-color: var(--clock-bg);
   color: var(--clock-color);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
   transition: background-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
     color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Safe-area inset offsets for iPadOS / iOS Home Screen standalone mode (viewport-fit=cover) */
+.safe-top-offset {
+  top: max(1.25rem, calc(env(safe-area-inset-top, 0px) + 0.5rem));
+}
+
+.safe-bottom-offset {
+  bottom: max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+}
+
+.safe-left-offset {
+  left: max(1.5rem, calc(env(safe-area-inset-left, 0px) + 0.75rem));
+}
+
+.safe-right-offset {
+  right: max(1.5rem, calc(env(safe-area-inset-right, 0px) + 0.75rem));
+}
+
+.safe-quick-start-offset {
+  bottom: calc(max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem)) + 3.75rem);
+}
+
+@media (min-width: 640px) {
+  .safe-quick-start-no-radio {
+    bottom: max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+  }
+}
+
+.pb-safe-sheet {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
 }
 
 .clock-digits {
@@ -148,6 +201,18 @@
   }
 }
 
+@keyframes bgFlashTick {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.42;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 @keyframes bgFlashGentle {
   0% {
     opacity: 0.32;
@@ -173,6 +238,10 @@
   animation: bgFlashPhase 0.9s ease-in-out forwards;
 }
 
+.animate-bg-flash-tick {
+  animation: bgFlashTick 0.42s ease-out forwards;
+}
+
 .animate-bg-flash-complete {
   animation: bgFlashComplete 2.1s ease-in-out forwards;
 }
@@ -185,8 +254,9 @@
   }
 
   .animate-bg-flash-phase,
+  .animate-bg-flash-tick,
   .animate-bg-flash-complete {
-    animation: bgFlashGentle 0.9s ease-out forwards;
+    animation: bgFlashGentle 0.45s ease-out forwards;
   }
 }
 

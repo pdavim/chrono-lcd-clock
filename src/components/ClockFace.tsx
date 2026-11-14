@@ -6,6 +6,8 @@ import {
   FocusState,
   IntervalPhase,
   IntervalState,
+  JujitsuPhase,
+  JujitsuState,
   LiveClockTimezone,
   TimeUntilTarget,
   formatAlarmTimeLabel,
@@ -15,7 +17,7 @@ import {
 
 export interface BgFlashEvent {
   key: number;
-  kind: 'phase' | 'complete';
+  kind: 'phase' | 'complete' | 'tick';
 }
 
 interface ClockFaceProps {
@@ -29,6 +31,7 @@ interface ClockFaceProps {
   sessionElapsedText: string;
   isAutoDimmed: boolean;
   intervalState: IntervalState;
+  jujitsuState: JujitsuState;
   focusState: FocusState;
   alarmClock: AlarmClockConfig;
   timeUntilTarget: TimeUntilTarget;
@@ -54,6 +57,7 @@ export function ClockFace({
   sessionElapsedText,
   isAutoDimmed,
   intervalState,
+  jujitsuState,
   focusState,
   alarmClock,
   timeUntilTarget,
@@ -147,6 +151,78 @@ export function ClockFace({
           <span className="opacity-80 font-normal">
             Cycle {intervalState.currentCycle} of {intervalState.totalCycles}
           </span>
+        </div>
+      );
+    }
+
+    if (mode === ClockMode.Jujitsu) {
+      const phaseLabel =
+        jujitsuState.phase === JujitsuPhase.Countdown
+          ? 'Combat'
+          : jujitsuState.phase === JujitsuPhase.Cooldown
+            ? 'Cooldown'
+            : 'Training Complete';
+
+      const totalHasHours = jujitsuState.totalRemainingMs >= 3_600_000;
+      const totalLeftFormatted = formatDurationMs(
+        jujitsuState.totalRemainingMs,
+        {
+          hh: totalHasHours,
+          mm: true,
+          ss: true,
+          ms: false,
+        }
+      );
+
+      const isFinalCooldownSeconds =
+        jujitsuState.phase === JujitsuPhase.Cooldown &&
+        jujitsuState.remainingMs > 0 &&
+        jujitsuState.remainingMs <= 5000;
+      const finalSecondNumber = isFinalCooldownSeconds
+        ? Math.ceil(jujitsuState.remainingMs / 1000)
+        : null;
+
+      return (
+        <div
+          data-testid="jujitsu-status"
+          aria-live="polite"
+          className="mb-6 flex flex-wrap items-center justify-center gap-3 text-base sm:text-xl md:text-2xl font-semibold tracking-wider opacity-90 tabular-nums select-none"
+        >
+          <span>{phaseLabel}</span>
+          <span aria-hidden="true" className="opacity-45">
+            ·
+          </span>
+          <span className="font-normal opacity-80">
+            {jujitsuState.phase === JujitsuPhase.Completed
+              ? `${jujitsuState.round} ${jujitsuState.round === 1 ? 'Round' : 'Rounds'}`
+              : `Round ${jujitsuState.round}`}
+          </span>
+          {jujitsuState.phase !== JujitsuPhase.Completed && (
+            <>
+              <span aria-hidden="true" className="opacity-45">
+                ·
+              </span>
+              <span
+                data-testid="jujitsu-total-remaining"
+                className="font-normal opacity-80"
+              >
+                {totalLeftFormatted} Left
+              </span>
+            </>
+          )}
+          {finalSecondNumber !== null && (
+            <>
+              <span aria-hidden="true" className="opacity-45">
+                ·
+              </span>
+              <span
+                data-testid="jujitsu-cooldown-alert"
+                className="font-bold opacity-100"
+              >
+                Ready {finalSecondNumber}s
+              </span>
+            </>
+          )}
         </div>
       );
     }
@@ -295,7 +371,9 @@ export function ClockFace({
           className={`clock-bg-flash-layer pointer-events-none fixed inset-0 z-0 opacity-0 ${
             bgFlashEvent.kind === 'complete'
               ? 'animate-bg-flash-complete'
-              : 'animate-bg-flash-phase'
+              : bgFlashEvent.kind === 'tick'
+                ? 'animate-bg-flash-tick'
+                : 'animate-bg-flash-phase'
           }`}
         />
       )}
