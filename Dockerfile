@@ -1,25 +1,28 @@
 # Explicitly pin Node.js version to match .nvmrc across local and container builds
-ARG NODE_VERSION=22.23.4
+ARG NODE_VERSION=22
 
 # Stage 1: Build Vite frontend assets & prune dev dependencies
 FROM node:${NODE_VERSION}-alpine AS builder
 
+ENV NODE_VERSION=22
+
 WORKDIR /app
 
 COPY .nvmrc package.json package-lock.json* ./
-RUN npm install --legacy-peer-deps --no-audit --no-fund
+RUN npm install --legacy-peer-deps
 
 COPY index.html metadata.json tsconfig.json vite.config.ts server.ts ./
 COPY public ./public
 COPY src ./src
 
-RUN npm run build && npm prune --omit=dev --legacy-peer-deps --no-audit --no-fund
+RUN npm run build && npm prune --omit=dev --legacy-peer-deps
 
 # Stage 2: Lean production runtime
 FROM node:${NODE_VERSION}-alpine AS runner
 
 WORKDIR /app
 
+ENV NODE_VERSION=22
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV NODE_OPTIONS="--experimental-strip-types"

@@ -43,6 +43,7 @@ import {
   shouldAutoDimDisplay,
   shouldShowJujitsuQuickStart,
   shouldShowRadioControlBar,
+  isTimerClockMode,
   stepFocusState,
   stepIntervalState,
   stepJujitsuState,
@@ -60,8 +61,15 @@ test('decomposeDurationMs converts milliseconds into hh, mm, ss, ms accurately',
   });
 });
 
-test('formatDurationMs respects HH, MM, SS, MS field toggles', () => {
+test('formatDurationMs respects HH, MM, SS, MS field toggles and defaults ms to false', () => {
+  assert.deepEqual(DEFAULT_SETTINGS.visibleFields, {
+    hh: true,
+    mm: true,
+    ss: true,
+    ms: false,
+  });
   const sampleMs = (2 * 3600 + 9 * 60 + 4) * 1000 + 75;
+  assert.equal(formatDurationMs(sampleMs, DEFAULT_SETTINGS.visibleFields), '02:09:04');
   assert.equal(
     formatDurationMs(sampleMs, { hh: true, mm: true, ss: true, ms: true }),
     '02:09:04:075'
@@ -229,7 +237,21 @@ test('formatLiveClockDate and estimateDisplayWidthEm behave consistently across 
   );
 });
 
-test('evaluateClockTap distinguishes single taps, double-tap resets, and disabled states', () => {
+test('evaluateClockTap starts/stops on single click and resets on double click for all timer modes', () => {
+  const timerModes = [
+    ClockMode.Stopwatch,
+    ClockMode.Countdown,
+    ClockMode.TimeUntil,
+    ClockMode.Interval,
+    ClockMode.Jujitsu,
+    ClockMode.FocusSession,
+  ];
+  for (const m of timerModes) {
+    assert.equal(isTimerClockMode(m), true);
+  }
+  assert.equal(isTimerClockMode(ClockMode.LiveClock), false);
+  assert.equal(isTimerClockMode(ClockMode.AlarmClock), false);
+
   // Settings open always closes settings first
   assert.deepEqual(
     evaluateClockTap({
@@ -242,7 +264,7 @@ test('evaluateClockTap distinguishes single taps, double-tap resets, and disable
     { action: 'close-settings', nextLastTapMs: null }
   );
 
-  // Disabled option performs immediate single-tap UI toggle
+  // Disabled double-tap reset option still performs immediate timer start/stop on click
   assert.deepEqual(
     evaluateClockTap({
       nowMs: 1000,
@@ -251,10 +273,10 @@ test('evaluateClockTap distinguishes single taps, double-tap resets, and disable
       mode: ClockMode.Stopwatch,
       isSettingsOpen: false,
     }),
-    { action: 'immediate-single-tap', nextLastTapMs: null }
+    { action: 'immediate-toggle-timer', nextLastTapMs: null }
   );
 
-  // LiveClock mode ignores double-tap reset and toggles UI immediately
+  // LiveClock and AlarmClock modes toggle UI immediately on single click
   assert.deepEqual(
     evaluateClockTap({
       nowMs: 1000,
@@ -263,43 +285,8 @@ test('evaluateClockTap distinguishes single taps, double-tap resets, and disable
       mode: ClockMode.LiveClock,
       isSettingsOpen: false,
     }),
-    { action: 'immediate-single-tap', nextLastTapMs: null }
+    { action: 'immediate-toggle-ui', nextLastTapMs: null }
   );
-
-  // First tap when enabled defers single-tap to wait for potential second tap
-  const tap1 = evaluateClockTap({
-    nowMs: 1000,
-    lastTapMs: null,
-    doubleTapResetEnabled: true,
-    mode: ClockMode.Countdown,
-    isSettingsOpen: false,
-  });
-  assert.deepEqual(tap1, { action: 'defer-single-tap', nextLastTapMs: 1000 });
-
-  // Second tap within 280ms triggers double-tap-reset and clears lastTapMs
-  const tap2 = evaluateClockTap({
-    nowMs: 1180,
-    lastTapMs: tap1.nextLastTapMs,
-    doubleTapResetEnabled: true,
-    mode: ClockMode.Countdown,
-    isSettingsOpen: false,
-  });
-  assert.deepEqual(tap2, { action: 'double-tap-reset', nextLastTapMs: null });
-
-  // Second tap beyond 280ms starts a new deferred single-tap window
-  const slowSecondTap = evaluateClockTap({
-    nowMs: 1450,
-    lastTapMs: 1000,
-    doubleTapResetEnabled: true,
-    mode: ClockMode.Countdown,
-    isSettingsOpen: false,
-  });
-  assert.deepEqual(slowSecondTap, {
-    action: 'defer-single-tap',
-    nextLastTapMs: 1450,
-  });
-
-  // AlarmClock mode toggles UI immediately on single tap without reset deferral
   assert.deepEqual(
     evaluateClockTap({
       nowMs: 1000,
@@ -308,8 +295,43 @@ test('evaluateClockTap distinguishes single taps, double-tap resets, and disable
       mode: ClockMode.AlarmClock,
       isSettingsOpen: false,
     }),
-    { action: 'immediate-single-tap', nextLastTapMs: null }
+    { action: 'immediate-toggle-ui', nextLastTapMs: null }
   );
+
+  // First click in any timer mode defers timer toggle briefly to detect double-click reset
+  for (const mode of timerModes) {
+    const tap1 = evaluateClockTap({
+      nowMs: 1000,
+      lastTapMs: null,
+      doubleTapResetEnabled: true,
+      mode,
+      isSettingsOpen: false,
+    });
+    assert.deepEqual(tap1, { action: 'defer-toggle-timer', nextLastTapMs: 1000 });
+
+    // Second click within threshold triggers double-tap-reset and clears lastTapMs
+    const tap2 = evaluateClockTap({
+      nowMs: 1180,
+      lastTapMs: tap1.nextLastTapMs,
+      doubleTapResetEnabled: true,
+      mode,
+      isSettingsOpen: false,
+    });
+    assert.deepEqual(tap2, { action: 'double-tap-reset', nextLastTapMs: null });
+  }
+
+  // Second click beyond threshold starts a new deferred timer toggle window
+  const slowSecondTap = evaluateClockTap({
+    nowMs: 1450,
+    lastTapMs: 1000,
+    doubleTapResetEnabled: true,
+    mode: ClockMode.Countdown,
+    isSettingsOpen: false,
+  });
+  assert.deepEqual(slowSecondTap, {
+    action: 'defer-toggle-timer',
+    nextLastTapMs: 1450,
+  });
 });
 
 test('Alarm Clock formatting, countdown calculation, and trigger evaluation work accurately', () => {
@@ -695,10 +717,26 @@ test('Jujitsu Cooldown emits exact last-5-seconds warning events (5, 4, 3, 2, 1)
   assert.equal(cooldownDone.nextState.totalRemainingMs, 3000);
 });
 
-test('shouldShowJujitsuQuickStart shows in idle/other modes and hides during active Jujitsu, UI hide, settings, or ringing alarm', () => {
-  // Visible on initial Stopwatch mode (even if Stopwatch is running)
+test('shouldShowJujitsuQuickStart respects showJujitsuQuickStart toggle and hides during active Jujitsu, UI hide, settings, or ringing alarm', () => {
+  assert.equal(DEFAULT_SETTINGS.showJujitsuQuickStart, true);
+
+  // Explicitly disabled in Settings -> Display hides button in all states
   assert.equal(
     shouldShowJujitsuQuickStart({
+      showJujitsuQuickStart: false,
+      mode: ClockMode.Stopwatch,
+      isRunning: false,
+      isUiHidden: false,
+      isSettingsOpen: false,
+      isAlarmRinging: false,
+    }),
+    false
+  );
+
+  // Visible on initial Stopwatch mode (even if Stopwatch is running) when enabled
+  assert.equal(
+    shouldShowJujitsuQuickStart({
+      showJujitsuQuickStart: true,
       mode: ClockMode.Stopwatch,
       isRunning: false,
       isUiHidden: false,
@@ -709,6 +747,7 @@ test('shouldShowJujitsuQuickStart shows in idle/other modes and hides during act
   );
   assert.equal(
     shouldShowJujitsuQuickStart({
+      showJujitsuQuickStart: true,
       mode: ClockMode.Stopwatch,
       isRunning: true,
       isUiHidden: false,
@@ -721,6 +760,7 @@ test('shouldShowJujitsuQuickStart shows in idle/other modes and hides during act
   // Visible in Jujitsu mode when paused / ready / completed
   assert.equal(
     shouldShowJujitsuQuickStart({
+      showJujitsuQuickStart: true,
       mode: ClockMode.Jujitsu,
       isRunning: false,
       isUiHidden: false,
@@ -733,6 +773,7 @@ test('shouldShowJujitsuQuickStart shows in idle/other modes and hides during act
   // Hidden while Jujitsu session is actively running
   assert.equal(
     shouldShowJujitsuQuickStart({
+      showJujitsuQuickStart: true,
       mode: ClockMode.Jujitsu,
       isRunning: true,
       isUiHidden: false,
@@ -745,6 +786,7 @@ test('shouldShowJujitsuQuickStart shows in idle/other modes and hides during act
   // Hidden when UI is hidden, settings drawer is open, or alarm clock is ringing
   assert.equal(
     shouldShowJujitsuQuickStart({
+      showJujitsuQuickStart: true,
       mode: ClockMode.Stopwatch,
       isRunning: false,
       isUiHidden: true,
@@ -755,6 +797,7 @@ test('shouldShowJujitsuQuickStart shows in idle/other modes and hides during act
   );
   assert.equal(
     shouldShowJujitsuQuickStart({
+      showJujitsuQuickStart: true,
       mode: ClockMode.LiveClock,
       isRunning: false,
       isUiHidden: false,
@@ -765,6 +808,7 @@ test('shouldShowJujitsuQuickStart shows in idle/other modes and hides during act
   );
   assert.equal(
     shouldShowJujitsuQuickStart({
+      showJujitsuQuickStart: true,
       mode: ClockMode.AlarmClock,
       isRunning: false,
       isUiHidden: false,

@@ -76,6 +76,7 @@ import {
   formatLiveClockDate,
   formatSessionElapsedHhMmSs,
   getFontDefinition,
+  isTimerClockMode,
   resolveNextTargetTimestampMs,
   sanitizeAlarmClockConfig,
   sanitizeCountdownTarget,
@@ -92,6 +93,7 @@ import {
 
 const STORAGE_KEY = 'chrono80_settings_v1';
 const PRESETS_STORAGE_KEY = 'chrono80_presets_v1';
+const MS_DEFAULT_MIGRATION_KEY = 'chrono80_ms_default_v2';
 
 function loadSavedPresets(): SavedTimerPreset[] {
   if (typeof window === 'undefined') return [...DEFAULT_TIMER_PRESETS];
@@ -107,6 +109,12 @@ function loadSavedPresets(): SavedTimerPreset[] {
 function loadSavedSettings(): ClockSettings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS;
   try {
+    const hasMigratedMsDefault =
+      window.localStorage.getItem(MS_DEFAULT_MIGRATION_KEY) === '1';
+    if (!hasMigratedMsDefault) {
+      window.localStorage.setItem(MS_DEFAULT_MIGRATION_KEY, '1');
+    }
+
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<ClockSettings>;
@@ -122,10 +130,12 @@ function loadSavedSettings(): ClockSettings {
           ? parsed.liveClockTimezone
           : DEFAULT_SETTINGS.liveClockTimezone,
       visibleFields: {
-        hh: parsed.visibleFields?.hh ?? true,
-        mm: parsed.visibleFields?.mm ?? true,
-        ss: parsed.visibleFields?.ss ?? true,
-        ms: parsed.visibleFields?.ms ?? true,
+        hh: parsed.visibleFields?.hh ?? DEFAULT_SETTINGS.visibleFields.hh,
+        mm: parsed.visibleFields?.mm ?? DEFAULT_SETTINGS.visibleFields.mm,
+        ss: parsed.visibleFields?.ss ?? DEFAULT_SETTINGS.visibleFields.ss,
+        ms: hasMigratedMsDefault
+          ? (parsed.visibleFields?.ms ?? DEFAULT_SETTINGS.visibleFields.ms)
+          : false,
       },
       showDate:
         typeof parsed.showDate === 'boolean'
@@ -139,6 +149,10 @@ function loadSavedSettings(): ClockSettings {
         typeof parsed.showRadioControl === 'boolean'
           ? parsed.showRadioControl
           : DEFAULT_SETTINGS.showRadioControl,
+      showJujitsuQuickStart:
+        typeof parsed.showJujitsuQuickStart === 'boolean'
+          ? parsed.showJujitsuQuickStart
+          : DEFAULT_SETTINGS.showJujitsuQuickStart,
       showBatteryLevel:
         typeof parsed.showBatteryLevel === 'boolean'
           ? parsed.showBatteryLevel
@@ -344,6 +358,7 @@ export default function App() {
 
   const lastTapTimeRef = useRef<number | null>(null);
   const singleTapTimerRef = useRef<number | null>(null);
+  const lastDoubleResetMsRef = useRef<number>(0);
   const lastTickedSecondRef = useRef<number | null>(null);
   const tickTestTimerRef = useRef<number | null>(null);
 
@@ -1395,8 +1410,6 @@ export default function App() {
           resolved.targetTimestampMs - now.getTime()
         );
         setIsTimeUntilTomorrow(resolved.isTomorrow);
-        isRunningRef.current = true;
-        setIsRunning(true);
         syncDomDisplay(
           currentSettings,
           intervalStateRef.current,
@@ -2309,6 +2322,7 @@ export default function App() {
       suppressNextClockClickRef.current = false;
       return;
     }
+    unlockAudioContext();
     if (isAlarmClockRingingRef.current) {
       handleStopRingingAlarm();
       return;
@@ -2331,20 +2345,27 @@ export default function App() {
       return;
     }
 
-    if (decision.action === 'immediate-single-tap') {
+    if (decision.action === 'immediate-toggle-ui') {
       clearPendingSingleTap();
       setIsUiHidden((prev) => !prev);
       return;
     }
 
+    if (decision.action === 'immediate-toggle-timer') {
+      clearPendingSingleTap();
+      handleToggleStartPause();
+      return;
+    }
+
     if (decision.action === 'double-tap-reset') {
       clearPendingSingleTap();
+      lastDoubleResetMsRef.current = performance.now();
       handleReset();
       setPhaseFlashKey((k) => k + 1);
       return;
     }
 
-    // 'defer-single-tap': wait briefly to see if a second tap completes a double-tap reset
+    // 'defer-toggle-timer': wait briefly to see if a second tap completes a double-tap reset
     if (singleTapTimerRef.current !== null) {
       window.clearTimeout(singleTapTimerRef.current);
     }
@@ -2352,8 +2373,22 @@ export default function App() {
     singleTapTimerRef.current = window.setTimeout(() => {
       singleTapTimerRef.current = null;
       lastTapTimeRef.current = null;
-      setIsUiHidden((prev) => !prev);
+      handleToggleStartPause();
     }, DOUBLE_TAP_THRESHOLD_MS);
+  };
+
+  const handleClockAreaDoubleClick = () => {
+    if (isSettingsOpenRef.current || isAlarmClockRingingRef.current) return;
+    if (!isTimerClockMode(settingsRef.current.mode)) return;
+    if (!settingsRef.current.doubleTapResetEnabled) return;
+
+    clearPendingSingleTap();
+    const now = performance.now();
+    if (now - lastDoubleResetMsRef.current > 350) {
+      lastDoubleResetMsRef.current = now;
+      handleReset();
+      setPhaseFlashKey((k) => k + 1);
+    }
   };
 
   const handleToggleSettings = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -2412,6 +2447,7 @@ export default function App() {
         mode={settings.mode}
         showBatteryLevel={settings.showBatteryLevel}
         showRadioControl={settings.showRadioControl}
+        showJujitsuQuickStart={settings.showJujitsuQuickStart}
         jujitsuConfig={settings.jujitsuConfig}
         isRunning={isRunning}
         isAlarmArmed={settings.alarmClock.enabled}
@@ -2476,6 +2512,12 @@ export default function App() {
           setSettings((prev) => ({
             ...prev,
             showRadioControl: !prev.showRadioControl,
+          }))
+        }
+        onToggleShowJujitsuQuickStart={() =>
+          setSettings((prev) => ({
+            ...prev,
+            showJujitsuQuickStart: !prev.showJujitsuQuickStart,
           }))
         }
         onToggleShowBatteryLevel={() =>
@@ -2563,6 +2605,7 @@ export default function App() {
         phaseFlashKey={phaseFlashKey}
         bgFlashEvent={bgFlashEvent}
         onClockAreaClick={handleClockAreaClick}
+        onClockAreaDoubleClick={handleClockAreaDoubleClick}
         onStopRingingAlarm={handleStopRingingAlarm}
         onSnoozeRingingAlarm={handleSnoozeRingingAlarm}
       />

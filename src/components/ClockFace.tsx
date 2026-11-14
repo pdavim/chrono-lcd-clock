@@ -42,6 +42,7 @@ interface ClockFaceProps {
   phaseFlashKey: number;
   bgFlashEvent: BgFlashEvent | null;
   onClockAreaClick: () => void;
+  onClockAreaDoubleClick?: () => void;
   onStopRingingAlarm: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onSnoozeRingingAlarm: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }
@@ -68,6 +69,7 @@ export function ClockFace({
   phaseFlashKey,
   bgFlashEvent,
   onClockAreaClick,
+  onClockAreaDoubleClick,
   onStopRingingAlarm,
   onSnoozeRingingAlarm,
 }: ClockFaceProps) {
@@ -361,6 +363,7 @@ export function ClockFace({
   return (
     <main
       onClick={onClockAreaClick}
+      onDoubleClick={onClockAreaDoubleClick}
       className="relative flex h-dvh w-screen flex-col items-center justify-center overflow-hidden px-4 select-none touch-manipulation cursor-pointer"
     >
       {bgFlashEvent && bgFlashEvent.key > 0 && (

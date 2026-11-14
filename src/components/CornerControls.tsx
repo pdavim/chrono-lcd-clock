@@ -32,6 +32,7 @@ interface CornerControlsProps {
   mode: ClockMode;
   showBatteryLevel: boolean;
   showRadioControl: boolean;
+  showJujitsuQuickStart: boolean;
   jujitsuConfig: JujitsuConfig;
   isRunning: boolean;
   isAlarmArmed: boolean;
@@ -56,6 +57,7 @@ export function CornerControls({
   mode,
   showBatteryLevel,
   showRadioControl,
+  showJujitsuQuickStart,
   jujitsuConfig,
   isRunning,
   isAlarmArmed,
@@ -121,6 +123,7 @@ export function CornerControls({
       : 'opacity-40 hover:opacity-85';
 
   const showQuickStart = shouldShowJujitsuQuickStart({
+    showJujitsuQuickStart,
     mode,
     isRunning,
     isUiHidden,

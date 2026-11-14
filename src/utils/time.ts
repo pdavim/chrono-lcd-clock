@@ -178,6 +178,7 @@ export interface ClockSettings {
   showDate: boolean;
   showSessionElapsed: boolean;
   showRadioControl: boolean;
+  showJujitsuQuickStart: boolean;
   showBatteryLevel: boolean;
   autoDimEnabled: boolean;
   countdownTarget: CountdownTarget;
@@ -314,11 +315,12 @@ export const DEFAULT_SETTINGS: ClockSettings = {
     hh: true,
     mm: true,
     ss: true,
-    ms: true,
+    ms: false,
   },
   showDate: false,
   showSessionElapsed: false,
   showRadioControl: true,
+  showJujitsuQuickStart: true,
   showBatteryLevel: true,
   autoDimEnabled: false,
   countdownTarget: {
@@ -702,12 +704,24 @@ export function estimateDisplayWidthEm(
   return Math.max(2.2, Number((totalEm + 0.45).toFixed(2)));
 }
 
-export const DOUBLE_TAP_THRESHOLD_MS = 280;
+export const DOUBLE_TAP_THRESHOLD_MS = 260;
+
+export function isTimerClockMode(mode: ClockMode): boolean {
+  return (
+    mode === ClockMode.Stopwatch ||
+    mode === ClockMode.Countdown ||
+    mode === ClockMode.TimeUntil ||
+    mode === ClockMode.Interval ||
+    mode === ClockMode.Jujitsu ||
+    mode === ClockMode.FocusSession
+  );
+}
 
 export type ClockTapAction =
   | 'close-settings'
-  | 'immediate-single-tap'
-  | 'defer-single-tap'
+  | 'immediate-toggle-ui'
+  | 'immediate-toggle-timer'
+  | 'defer-toggle-timer'
   | 'double-tap-reset';
 
 export function evaluateClockTap(params: {
@@ -725,12 +739,12 @@ export function evaluateClockTap(params: {
     return { action: 'close-settings', nextLastTapMs: null };
   }
 
-  if (
-    !params.doubleTapResetEnabled ||
-    params.mode === ClockMode.LiveClock ||
-    params.mode === ClockMode.AlarmClock
-  ) {
-    return { action: 'immediate-single-tap', nextLastTapMs: null };
+  if (!isTimerClockMode(params.mode)) {
+    return { action: 'immediate-toggle-ui', nextLastTapMs: null };
+  }
+
+  if (!params.doubleTapResetEnabled) {
+    return { action: 'immediate-toggle-timer', nextLastTapMs: null };
   }
 
   const threshold = params.thresholdMs ?? DOUBLE_TAP_THRESHOLD_MS;
@@ -742,7 +756,7 @@ export function evaluateClockTap(params: {
     return { action: 'double-tap-reset', nextLastTapMs: null };
   }
 
-  return { action: 'defer-single-tap', nextLastTapMs: params.nowMs };
+  return { action: 'defer-toggle-timer', nextLastTapMs: params.nowMs };
 }
 
 export function sanitizeAlarmClockConfig(
@@ -1061,12 +1075,16 @@ export function shouldShowRadioControlBar(params: {
 }
 
 export function shouldShowJujitsuQuickStart(params: {
+  showJujitsuQuickStart?: boolean;
   mode: ClockMode;
   isRunning: boolean;
   isUiHidden: boolean;
   isSettingsOpen: boolean;
   isAlarmRinging: boolean;
 }): boolean {
+  if (params.showJujitsuQuickStart === false) {
+    return false;
+  }
   if (params.isUiHidden || params.isSettingsOpen || params.isAlarmRinging) {
     return false;
   }

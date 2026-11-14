@@ -3,11 +3,13 @@ import {
   BatteryCharging,
   Bell,
   BellOff,
+  Bookmark,
   Calendar,
   Clock,
   LocateFixed,
   Minus,
   Moon,
+  Play,
   Plus,
   Radio,
   RotateCcw,
@@ -60,12 +62,17 @@ import {
   formatDurationMs,
   formatRemainingTimeBrief,
   formatTimeUntilLabel,
+  isTimerClockMode,
   resolveNextTargetTimestampMs,
 } from '../utils/time';
 import { PWAInstallButton } from './PWAInstallButton';
 import { RadioConnectorTab } from './RadioConnectorTab';
+import {
+  SettingsSectionGallery,
+  SettingsTabId,
+} from './SettingsSectionGallery';
 
-export type SettingsTabId = 'timer' | 'radio' | 'display' | 'alerts';
+export type { SettingsTabId } from './SettingsSectionGallery';
 
 interface DurationInputGroupProps {
   label: string;
@@ -107,7 +114,7 @@ function DurationInputGroup({
           value={value.hh}
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => handlePartChange('hh', e.target.value)}
-          className="clean-num-input h-11 w-12 rounded-lg border border-slate-700 bg-slate-800/90 px-1.5 text-center text-xs font-semibold text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+          className="clean-num-input h-11 w-12 rounded-lg border border-slate-700 bg-slate-800/90 px-1.5 text-center text-xs font-semibold text-white tabular-nums focus-visible:border-emerald-400 focus-visible:outline-none"
         />
         <span className="text-xs font-bold text-slate-500" aria-hidden="true">
           :
@@ -121,7 +128,7 @@ function DurationInputGroup({
           value={value.mm}
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => handlePartChange('mm', e.target.value)}
-          className="clean-num-input h-11 w-12 rounded-lg border border-slate-700 bg-slate-800/90 px-1.5 text-center text-xs font-semibold text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+          className="clean-num-input h-11 w-12 rounded-lg border border-slate-700 bg-slate-800/90 px-1.5 text-center text-xs font-semibold text-white tabular-nums focus-visible:border-emerald-400 focus-visible:outline-none"
         />
         <span className="text-xs font-bold text-slate-500" aria-hidden="true">
           :
@@ -135,7 +142,7 @@ function DurationInputGroup({
           value={value.ss}
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => handlePartChange('ss', e.target.value)}
-          className="clean-num-input h-11 w-12 rounded-lg border border-slate-700 bg-slate-800/90 px-1.5 text-center text-xs font-semibold text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+          className="clean-num-input h-11 w-12 rounded-lg border border-slate-700 bg-slate-800/90 px-1.5 text-center text-xs font-semibold text-white tabular-nums focus-visible:border-emerald-400 focus-visible:outline-none"
         />
       </div>
     </div>
@@ -160,6 +167,7 @@ interface SettingsDrawerProps {
   onToggleShowDate: () => void;
   onToggleSessionElapsed: () => void;
   onToggleShowRadioControl: () => void;
+  onToggleShowJujitsuQuickStart: () => void;
   onToggleShowBatteryLevel: () => void;
   onToggleAutoDim: () => void;
   onChangeCountdownTarget: (target: CountdownTarget) => void;
@@ -215,13 +223,6 @@ const FIELD_ITEMS: readonly { key: TimeFieldKey; label: string }[] = [
   { key: 'ms', label: 'MS' },
 ];
 
-const SETTINGS_TABS: readonly { id: SettingsTabId; label: string }[] = [
-  { id: 'timer', label: 'Timer' },
-  { id: 'radio', label: 'Radio' },
-  { id: 'display', label: 'Display' },
-  { id: 'alerts', label: 'Alerts' },
-];
-
 export function SettingsDrawer({
   isOpen,
   requestedTab,
@@ -240,6 +241,7 @@ export function SettingsDrawer({
   onToggleShowDate,
   onToggleSessionElapsed,
   onToggleShowRadioControl,
+  onToggleShowJujitsuQuickStart,
   onToggleShowBatteryLevel,
   onToggleAutoDim,
   onChangeCountdownTarget,
@@ -372,7 +374,7 @@ export function SettingsDrawer({
         aria-modal="true"
         aria-labelledby="settings-modal-title"
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[86dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/12 bg-slate-950 text-slate-100 shadow-2xl sm:max-h-[82dvh] sm:max-w-lg sm:rounded-3xl"
+        className="flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/12 bg-slate-950 text-slate-100 shadow-2xl sm:max-h-[85dvh] sm:max-w-2xl sm:rounded-3xl"
       >
         {/* Mobile Bottom-Sheet Grab Handle */}
         <div
@@ -381,58 +383,40 @@ export function SettingsDrawer({
         />
 
         {/* Modal Header */}
-        <div className="flex shrink-0 items-center justify-between gap-4 px-5 pt-2.5 pb-2.5 sm:pt-4">
-          <h2
-            id="settings-modal-title"
-            className="text-base font-semibold tracking-tight text-white"
-          >
-            Settings
-          </h2>
+        <div className="flex shrink-0 items-center justify-between gap-4 px-4 pt-2.5 pb-2.5 sm:px-6 sm:pt-4">
+          <div className="flex items-baseline gap-2.5 min-w-0">
+            <h2
+              id="settings-modal-title"
+              className="text-base font-semibold tracking-tight text-white whitespace-nowrap"
+            >
+              Settings
+            </h2>
+            <span className="hidden sm:inline text-xs text-slate-400 truncate">
+              Select a section thumbnail below
+            </span>
+          </div>
           <button
             id="close-settings-btn"
             type="button"
             aria-label="Close settings"
             onClick={onClose}
-            className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800/80 hover:text-white transition-colors cursor-pointer"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800/80 hover:text-white transition-colors cursor-pointer"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
-        {/* Organized Section Tabs */}
-        <div className="shrink-0 border-b border-white/8 px-5 pb-3.5">
-          <div
-            role="tablist"
-            aria-label="Settings sections"
-            className="grid grid-cols-4 gap-1 rounded-xl bg-slate-900/90 p-1"
-          >
-            {SETTINGS_TABS.map((tab) => {
-              const isSelected = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  id={`tab-${tab.id}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={isSelected}
-                  aria-controls={`panel-${tab.id}`}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`h-11 rounded-lg px-3 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    isSelected
-                      ? 'bg-emerald-400 text-slate-950'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {/* Visual Thumbnail Gallery Navigation */}
+        <SettingsSectionGallery
+          activeTab={activeTab}
+          settings={settings}
+          presetsCount={presets.length}
+          onSelectTab={setActiveTab}
+        />
 
-        {/* Scrollable Tab Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 pb-safe-sheet">
-          {/* TAB 1: TIMER & PRESETS */}
+        {/* Scrollable Section Body */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 pb-safe-sheet sm:px-6 sm:py-5">
+          {/* SECTION 1: TIMER MODE & PARAMETERS */}
           {activeTab === 'timer' && (
             <div
               id="panel-timer"
@@ -440,16 +424,18 @@ export function SettingsDrawer({
               aria-labelledby="tab-timer"
               className="flex flex-col gap-4"
             >
-              {/* Mode Selector */}
               <div className="flex items-center justify-between gap-3">
-                <label
-                  htmlFor="mode-select"
-                  className="text-xs font-medium text-slate-300 whitespace-nowrap shrink-0"
-                >
-                  Mode
-                </label>
+                <div className="flex flex-col">
+                  <h3 className="text-xs font-semibold text-slate-200">
+                    Timer Mode
+                  </h3>
+                  <span className="text-[11px] text-slate-400">
+                    Choose active clock or training mode
+                  </span>
+                </div>
                 <select
                   id="mode-select"
+                  aria-label="Mode"
                   value={settings.mode}
                   onChange={(e) => {
                     const nextMode = e.target.value as ClockMode;
@@ -466,7 +452,7 @@ export function SettingsDrawer({
                     }
                     onChangeMode(nextMode);
                   }}
-                  className="h-11 w-52 sm:w-60 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+                  className="h-11 w-48 sm:w-60 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
                 >
                   <option value={ClockMode.Stopwatch}>Stopwatch</option>
                   <option value={ClockMode.Countdown}>Countdown</option>
@@ -482,9 +468,10 @@ export function SettingsDrawer({
               {/* Stopwatch Info */}
               {settings.mode === ClockMode.Stopwatch && (
                 <div className="border-t border-white/8 pt-3.5">
-                  <p className="text-xs text-slate-400">
-                    Counts upward from zero with millisecond precision. Use the
-                    bottom-left icon or Spacebar to start and pause.
+                  <p className="text-xs leading-relaxed text-slate-400">
+                    Counts upward from zero. Click the clock face, bottom-left
+                    icon, or Spacebar to start and stop; double-click the clock
+                    face to reset.
                   </p>
                 </div>
               )}
@@ -519,7 +506,7 @@ export function SettingsDrawer({
                   />
                   <div
                     data-testid="time-until-preview"
-                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-800/90 bg-slate-900/70 px-3 py-2.5"
+                    className="flex items-center justify-between gap-3 border-t border-white/8 pt-3"
                   >
                     <div className="flex flex-col">
                       <span className="text-xs font-medium text-slate-200 tabular-nums">
@@ -593,7 +580,7 @@ export function SettingsDrawer({
                             Number.isNaN(parsed) ? 1 : parsed
                           );
                         }}
-                        className="clean-num-input h-11 w-14 rounded-lg border border-slate-700 bg-slate-800/90 px-2 text-center text-xs font-semibold text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+                        className="clean-num-input h-11 w-14 rounded-lg border border-slate-700 bg-slate-800/90 px-2 text-center text-xs font-semibold text-white tabular-nums focus-visible:border-emerald-400 focus-visible:outline-none"
                       />
                       <button
                         type="button"
@@ -670,7 +657,7 @@ export function SettingsDrawer({
                             e.target.value as JujitsuSoundId
                           );
                         }}
-                        className="h-11 min-w-0 flex-1 sm:w-44 sm:flex-none rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+                        className="h-11 min-w-0 flex-1 sm:w-48 sm:flex-none rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
                       >
                         {JUJITSU_SOUND_OPTIONS.map((opt) => (
                           <option key={opt.id} value={opt.id}>
@@ -683,7 +670,7 @@ export function SettingsDrawer({
                         id="jj-test-start-sound-btn"
                         aria-label="Test start sound"
                         onClick={onTestJujitsuStartSound}
-                        className="h-11 rounded-lg border border-slate-700 bg-slate-800/90 px-3 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white active:scale-95 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        className="h-11 rounded-lg border border-slate-700 bg-slate-800/90 px-3.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white active:scale-95 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         Test
                       </button>
@@ -714,7 +701,7 @@ export function SettingsDrawer({
                             e.target.value as JujitsuSoundId
                           );
                         }}
-                        className="h-11 min-w-0 flex-1 sm:w-44 sm:flex-none rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+                        className="h-11 min-w-0 flex-1 sm:w-48 sm:flex-none rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
                       >
                         {JUJITSU_SOUND_OPTIONS.map((opt) => (
                           <option key={opt.id} value={opt.id}>
@@ -727,7 +714,7 @@ export function SettingsDrawer({
                         id="jj-test-stop-sound-btn"
                         aria-label="Test stop sound"
                         onClick={onTestJujitsuStopSound}
-                        className="h-11 rounded-lg border border-slate-700 bg-slate-800/90 px-3 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white active:scale-95 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        className="h-11 rounded-lg border border-slate-700 bg-slate-800/90 px-3.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white active:scale-95 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         Test
                       </button>
@@ -796,7 +783,7 @@ export function SettingsDrawer({
                             Number.isNaN(parsed) ? 1 : parsed
                           );
                         }}
-                        className="clean-num-input h-11 w-14 rounded-lg border border-slate-700 bg-slate-800/90 px-2 text-center text-xs font-semibold text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+                        className="clean-num-input h-11 w-14 rounded-lg border border-slate-700 bg-slate-800/90 px-2 text-center text-xs font-semibold text-white tabular-nums focus-visible:border-emerald-400 focus-visible:outline-none"
                       />
                       <button
                         type="button"
@@ -894,7 +881,7 @@ export function SettingsDrawer({
                             alarmWakeMode: AlarmWakeMode.RetroTone,
                           })
                         }
-                        className={`h-10 rounded-lg border px-2.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                        className={`h-11 rounded-lg border px-3 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                           settings.media.alarmWakeMode === AlarmWakeMode.RetroTone
                             ? 'border-emerald-400 bg-emerald-400 text-slate-950'
                             : 'border-slate-700 bg-slate-900 text-slate-300 hover:text-white'
@@ -910,7 +897,7 @@ export function SettingsDrawer({
                         onClick={() =>
                           onUpdateMedia({ alarmWakeMode: AlarmWakeMode.Media })
                         }
-                        className={`h-10 rounded-lg border px-2.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                        className={`h-11 rounded-lg border px-3 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                           settings.media.alarmWakeMode === AlarmWakeMode.Media
                             ? 'border-emerald-400 bg-emerald-400 text-slate-950'
                             : 'border-slate-700 bg-slate-900 text-slate-300 hover:text-white'
@@ -933,7 +920,7 @@ export function SettingsDrawer({
                     <div
                       role="group"
                       aria-label="Live clock time zone"
-                      className="grid w-52 sm:w-60 grid-cols-2 gap-1.5"
+                      className="grid w-48 sm:w-60 grid-cols-2 gap-1.5"
                     >
                       <button
                         type="button"
@@ -974,145 +961,180 @@ export function SettingsDrawer({
                 </div>
               )}
 
-              {/* Saved Presets Section (Grouped by Category) */}
-              <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
-                <div className="flex items-center justify-between">
+              {/* Footer Shortcut to Presets + Clock Gesture Summary */}
+              <div className="flex flex-col gap-3 border-t border-white/8 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs text-slate-400">
+                  {isTimerClockMode(settings.mode)
+                    ? 'Click clock face to start or pause · Double-click to reset'
+                    : 'Click clock face to show or hide corner controls'}
+                </span>
+                <button
+                  type="button"
+                  id="open-presets-gallery-btn"
+                  onClick={() => setActiveTab('presets')}
+                  className="flex h-11 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3.5 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-800 hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Bookmark className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Manage Presets ({presets.length})</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* SECTION 2: PRESETS LIBRARY & SAVE */}
+          {activeTab === 'presets' && (
+            <div
+              id="panel-presets"
+              role="tabpanel"
+              aria-labelledby="tab-presets"
+              className="flex flex-col gap-4"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col">
                   <h3 className="text-xs font-semibold text-slate-200">
-                    Presets
+                    Saved Presets
                   </h3>
-                  <span className="text-xs text-slate-400 tabular-nums">
-                    {presets.length} saved
+                  <span className="text-[11px] text-slate-400">
+                    Load a saved timer setup with one tap
                   </span>
                 </div>
+                <span className="text-xs text-slate-400 tabular-nums whitespace-nowrap shrink-0">
+                  {presets.length} saved
+                </span>
+              </div>
 
-                {/* Category Filter Tabs */}
-                <div
-                  role="group"
-                  aria-label="Filter presets by category"
-                  className="grid grid-cols-3 sm:grid-cols-5 gap-1.5"
+              {/* Category Filter Controls */}
+              <div
+                role="group"
+                aria-label="Filter presets by category"
+                className="grid grid-cols-3 sm:grid-cols-5 gap-1.5"
+              >
+                <button
+                  type="button"
+                  id="preset-filter-all"
+                  aria-pressed={presetCategoryFilter === 'all'}
+                  onClick={() => setPresetCategoryFilter('all')}
+                  className={`h-11 rounded-lg border px-2 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                    presetCategoryFilter === 'all'
+                      ? 'border-emerald-400 bg-emerald-400 text-slate-950'
+                      : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-600 hover:text-white'
+                  }`}
                 >
-                  <button
-                    type="button"
-                    id="preset-filter-all"
-                    aria-pressed={presetCategoryFilter === 'all'}
-                    onClick={() => setPresetCategoryFilter('all')}
-                    className={`h-9 rounded-lg border px-2 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
-                      presetCategoryFilter === 'all'
-                        ? 'border-emerald-400 bg-emerald-400 text-slate-950'
-                        : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-600 hover:text-white'
-                    }`}
-                  >
-                    All
-                  </button>
-                  {PRESET_CATEGORY_OPTIONS.map((cat) => {
-                    const isSelected = presetCategoryFilter === cat.id;
-                    return (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        id={`preset-filter-${cat.id}`}
-                        aria-pressed={isSelected}
-                        onClick={() => {
-                          setPresetCategoryFilter(cat.id);
-                          setNewPresetCategory(cat.id);
-                        }}
-                        className={`h-9 rounded-lg border px-2 text-xs font-semibold transition-colors whitespace-nowrap truncate cursor-pointer ${
-                          isSelected
-                            ? 'border-emerald-400 bg-emerald-400 text-slate-950'
-                            : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-600 hover:text-white'
-                        }`}
-                      >
-                        {cat.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                  All
+                </button>
+                {PRESET_CATEGORY_OPTIONS.map((cat) => {
+                  const isSelected = presetCategoryFilter === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      id={`preset-filter-${cat.id}`}
+                      aria-pressed={isSelected}
+                      onClick={() => {
+                        setPresetCategoryFilter(cat.id);
+                        setNewPresetCategory(cat.id);
+                      }}
+                      className={`h-11 rounded-lg border px-2 text-xs font-semibold transition-colors whitespace-nowrap truncate cursor-pointer ${
+                        isSelected
+                          ? 'border-emerald-400 bg-emerald-400 text-slate-950'
+                          : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-600 hover:text-white'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
 
-                {groupedPresets.length === 0 ? (
-                  <p className="py-1.5 text-xs text-slate-400">
-                    {presetCategoryFilter === 'all'
-                      ? 'No saved presets yet.'
-                      : `No ${getPresetCategoryLabel(presetCategoryFilter)} presets saved yet.`}
-                  </p>
-                ) : (
-                  <div
-                    className="flex flex-col gap-3"
-                    aria-label="Saved timer presets by category"
-                  >
-                    {groupedPresets.map((group) => (
-                      <div
-                        key={group.category}
-                        data-testid={`preset-group-${group.category}`}
-                        className="flex flex-col gap-1.5"
-                      >
-                        <div className="flex items-center justify-between px-0.5">
-                          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                            {group.label}
-                          </span>
-                          <span className="text-[11px] text-slate-500 tabular-nums">
-                            {group.items.length}
-                          </span>
-                        </div>
-                        <div
-                          className="flex flex-col gap-1.5"
-                          role="list"
-                          aria-label={`${group.label} presets`}
-                        >
-                          {group.items.map((preset) => {
-                            const isActivePreset = isPresetMatchingSettings(
-                              preset,
-                              settings
-                            );
-                            return (
-                              <div
-                                key={preset.id}
-                                role="listitem"
-                                className="flex items-center gap-1.5"
-                              >
-                                <button
-                                  type="button"
-                                  aria-pressed={isActivePreset}
-                                  onClick={() => {
-                                    setPresetError(null);
-                                    onSelectPreset(preset);
-                                  }}
-                                  className={`flex min-h-[44px] min-w-0 flex-1 flex-col items-start justify-center rounded-lg border px-3 py-1.5 text-left transition-colors cursor-pointer ${
-                                    isActivePreset
-                                      ? 'border-emerald-400/80 bg-emerald-400/15 text-emerald-100'
-                                      : 'border-slate-800 bg-slate-900/80 text-slate-200 hover:border-slate-600 hover:bg-slate-900'
-                                  }`}
-                                >
-                                  <span className="w-full truncate text-xs font-semibold">
-                                    {preset.name}
-                                  </span>
-                                  <span className="w-full truncate text-[11px] text-slate-400 tabular-nums">
-                                    {formatPresetSummary(preset)}
-                                  </span>
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label={`Delete preset '${preset.name}'`}
-                                  onClick={() => onDeletePreset(preset.id)}
-                                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-900/80 text-slate-400 hover:border-rose-500/50 hover:text-rose-300 transition-colors cursor-pointer"
-                                >
-                                  <Trash2
-                                    className="h-4 w-4"
-                                    aria-hidden="true"
-                                  />
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
+              {groupedPresets.length === 0 ? (
+                <p className="py-2 text-xs text-slate-400">
+                  {presetCategoryFilter === 'all'
+                    ? 'No saved presets yet.'
+                    : `No ${getPresetCategoryLabel(presetCategoryFilter)} presets saved yet.`}
+                </p>
+              ) : (
+                <div
+                  className="flex flex-col gap-4"
+                  aria-label="Saved timer presets by category"
+                >
+                  {groupedPresets.map((group) => (
+                    <div
+                      key={group.category}
+                      data-testid={`preset-group-${group.category}`}
+                      className="flex flex-col gap-2"
+                    >
+                      <div className="flex items-center justify-between px-0.5">
+                        <span className="text-xs font-semibold text-slate-300">
+                          {group.label}
+                        </span>
+                        <span className="text-xs text-slate-500 tabular-nums">
+                          {group.items.length}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <div
+                        className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                        role="list"
+                        aria-label={`${group.label} presets`}
+                      >
+                        {group.items.map((preset) => {
+                          const isActivePreset = isPresetMatchingSettings(
+                            preset,
+                            settings
+                          );
+                          return (
+                            <div
+                              key={preset.id}
+                              role="listitem"
+                              className="flex items-center gap-1.5"
+                            >
+                              <button
+                                type="button"
+                                aria-pressed={isActivePreset}
+                                onClick={() => {
+                                  setPresetError(null);
+                                  onSelectPreset(preset);
+                                }}
+                                className={`flex min-h-[48px] min-w-0 flex-1 flex-col items-start justify-center rounded-lg border px-3 py-1.5 text-left transition-colors cursor-pointer ${
+                                  isActivePreset
+                                    ? 'border-emerald-400/80 bg-emerald-400/15 text-emerald-100'
+                                    : 'border-slate-800 bg-slate-900/80 text-slate-200 hover:border-slate-600 hover:bg-slate-900'
+                                }`}
+                              >
+                                <span className="w-full truncate text-xs font-semibold">
+                                  {preset.name}
+                                </span>
+                                <span className="w-full truncate text-[11px] text-slate-400 tabular-nums">
+                                  {formatPresetSummary(preset)}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Delete preset '${preset.name}'`}
+                                onClick={() => onDeletePreset(preset.id)}
+                                className="flex h-12 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-900/80 text-slate-400 hover:border-rose-500/50 hover:text-rose-300 transition-colors cursor-pointer"
+                              >
+                                <Trash2
+                                  className="h-4 w-4"
+                                  aria-hidden="true"
+                                />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
+              <div className="flex flex-col gap-2.5 border-t border-white/8 pt-4">
+                <span className="text-xs font-semibold text-slate-200">
+                  Save Current Setup
+                </span>
                 {canSaveCurrentMode ? (
                   <form
                     onSubmit={handleSavePresetSubmit}
-                    className="flex flex-col gap-2 pt-1"
+                    className="flex flex-col gap-2"
                   >
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
                       <input
@@ -1120,7 +1142,7 @@ export function SettingsDrawer({
                         id="preset-name-input"
                         type="text"
                         aria-label="Preset name"
-                        placeholder="Save current as preset..."
+                        placeholder="Preset name (e.g. Kumite 5m Rounds)"
                         maxLength={36}
                         value={presetName}
                         onChange={(e) => {
@@ -1139,7 +1161,7 @@ export function SettingsDrawer({
                               e.target.value as PresetCategory
                             )
                           }
-                          className="h-11 flex-1 sm:w-32 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+                          className="h-11 flex-1 sm:w-36 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
                         >
                           {PRESET_CATEGORY_OPTIONS.map((cat) => (
                             <option key={cat.id} value={cat.id}>
@@ -1162,216 +1184,81 @@ export function SettingsDrawer({
                     )}
                   </form>
                 ) : (
-                  <p className="text-[11px] text-slate-400">
-                    Select Countdown, Time Until, Interval, Jujitsu, Focus
-                    Session, or Alarm Clock mode above to save a preset.
-                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-slate-400">
+                      Switch to Countdown, Time Until, Interval, Jujitsu, Focus
+                      Session, or Alarm Clock to save a custom preset.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('timer')}
+                      className="h-11 rounded-lg border border-slate-700 bg-slate-900 px-3.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      Configure Timer
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* TAB 2: RADIO & MUSIC CONNECTORS */}
-          {activeTab === 'radio' && (
-            <RadioConnectorTab
-              media={settings.media}
-              onUpdateMedia={onUpdateMedia}
-              onPlayMediaNow={onPlayMediaNow}
-              onPauseMediaNow={onPauseMediaNow}
-            />
-          )}
-
-          {/* TAB 3: DISPLAY, SUB-COUNTER & THEMES */}
+          {/* SECTION 3: DISPLAY, CONTROLS & THEMES */}
           {activeTab === 'display' && (
             <div
               id="panel-display"
               role="tabpanel"
               aria-labelledby="tab-display"
-              className="flex flex-col gap-4"
+              className="flex flex-col gap-5"
             >
-              {/* Show Fields (HH, MM, SS, MS) */}
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-slate-300 whitespace-nowrap shrink-0">
-                  Show Fields
-                </span>
-                <div
-                  className="flex items-center gap-1.5"
-                  role="group"
-                  aria-label="Visible clock fields"
-                >
-                  {FIELD_ITEMS.map(({ key, label }) => {
-                    const isActive = settings.visibleFields[key];
-                    const isLastActive = isActive && activeFieldCount <= 1;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        aria-pressed={isActive}
-                        disabled={isLastActive}
-                        title={
-                          isLastActive
-                            ? 'At least one field must remain visible'
-                            : `Toggle ${label}`
-                        }
-                        onClick={() => onToggleField(key)}
-                        className={`h-11 min-w-[46px] rounded-lg border px-2.5 text-xs font-bold transition-colors whitespace-nowrap shrink-0 ${
-                          isActive
-                            ? 'border-emerald-400 bg-emerald-400 text-slate-950'
-                            : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-white'
-                        } ${isLastActive ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
+              {/* Group 1: Digits, Typography & Scale */}
+              <div className="flex flex-col gap-3.5">
+                <h3 className="text-xs font-semibold text-slate-200">
+                  Digits &amp; Typography
+                </h3>
+
+                {/* Show Fields (HH, MM, SS, MS) */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium text-slate-300 whitespace-nowrap">
+                      Show Fields
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Milliseconds (MS) off by default
+                    </span>
+                  </div>
+                  <div
+                    className="flex items-center gap-1.5"
+                    role="group"
+                    aria-label="Visible clock fields"
+                  >
+                    {FIELD_ITEMS.map(({ key, label }) => {
+                      const isActive = settings.visibleFields[key];
+                      const isLastActive = isActive && activeFieldCount <= 1;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          aria-pressed={isActive}
+                          disabled={isLastActive}
+                          title={
+                            isLastActive
+                              ? 'At least one field must remain visible'
+                              : `Toggle ${label}`
+                          }
+                          onClick={() => onToggleField(key)}
+                          className={`h-11 min-w-[46px] rounded-lg border px-2.5 text-xs font-bold transition-colors whitespace-nowrap shrink-0 ${
+                            isActive
+                              ? 'border-emerald-400 bg-emerald-400 text-slate-950'
+                              : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-white'
+                          } ${isLastActive ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
 
-              {/* Show Date (DD/MM/YYYY) Toggle */}
-              <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-4">
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-slate-200">
-                    Show Date
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    Current calendar date (DD/MM/YYYY)
-                  </span>
-                </div>
-                <button
-                  id="show-date-switch"
-                  type="button"
-                  role="switch"
-                  aria-checked={settings.showDate}
-                  aria-label="Show Date"
-                  onClick={onToggleShowDate}
-                  className={`flex h-11 min-w-[86px] items-center justify-center gap-1.5 rounded-lg border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    settings.showDate
-                      ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
-                      : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Calendar className="h-4 w-4" aria-hidden="true" />
-                  <span>{settings.showDate ? 'On' : 'Off'}</span>
-                </button>
-              </div>
-
-              {/* Session Elapsed Sub-Counter Toggle */}
-              <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-4">
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-slate-200">
-                    Session Sub-Counter
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    Total elapsed session time (HH:MM:SS)
-                  </span>
-                </div>
-                <button
-                  id="session-subcounter-switch"
-                  type="button"
-                  role="switch"
-                  aria-checked={settings.showSessionElapsed}
-                  aria-label="Session Sub-Counter"
-                  onClick={onToggleSessionElapsed}
-                  className={`flex h-11 min-w-[86px] items-center justify-center gap-1.5 rounded-lg border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    settings.showSessionElapsed
-                      ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
-                      : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Clock className="h-4 w-4" aria-hidden="true" />
-                  <span>{settings.showSessionElapsed ? 'On' : 'Off'}</span>
-                </button>
-              </div>
-
-              {/* Radio / Music Control Bar Toggle */}
-              <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-4">
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-slate-200">
-                    Radio / Music Control
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    Show player bar on main clock screen
-                  </span>
-                </div>
-                <button
-                  id="show-radio-control-switch"
-                  type="button"
-                  role="switch"
-                  aria-checked={settings.showRadioControl}
-                  aria-label="Radio / Music Control"
-                  onClick={onToggleShowRadioControl}
-                  className={`flex h-11 min-w-[86px] items-center justify-center gap-1.5 rounded-lg border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    settings.showRadioControl
-                      ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
-                      : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Radio className="h-4 w-4" aria-hidden="true" />
-                  <span>{settings.showRadioControl ? 'On' : 'Off'}</span>
-                </button>
-              </div>
-
-              {/* Battery Level Corner Indicator Toggle */}
-              <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-4">
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-slate-200">
-                    Battery Level
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    Show real-time device charge in corner
-                  </span>
-                </div>
-                <button
-                  id="show-battery-level-switch"
-                  type="button"
-                  role="switch"
-                  aria-checked={settings.showBatteryLevel}
-                  aria-label="Battery Level"
-                  onClick={onToggleShowBatteryLevel}
-                  className={`flex h-11 min-w-[86px] items-center justify-center gap-1.5 rounded-lg border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    settings.showBatteryLevel
-                      ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
-                      : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <BatteryCharging className="h-4 w-4" aria-hidden="true" />
-                  <span>{settings.showBatteryLevel ? 'On' : 'Off'}</span>
-                </button>
-              </div>
-
-              {/* Auto-Dim Burn-In Protection Toggle */}
-              <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-4">
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-slate-200">
-                    Auto-Dim
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    Dims display after 30s of inactivity
-                  </span>
-                </div>
-                <button
-                  id="auto-dim-switch"
-                  type="button"
-                  role="switch"
-                  aria-checked={settings.autoDimEnabled}
-                  aria-label="Auto-Dim"
-                  onClick={onToggleAutoDim}
-                  className={`flex h-11 min-w-[86px] items-center justify-center gap-1.5 rounded-lg border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    settings.autoDimEnabled
-                      ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
-                      : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Moon className="h-4 w-4" aria-hidden="true" />
-                  <span>{settings.autoDimEnabled ? 'On' : 'Off'}</span>
-                </button>
-              </div>
-
-              {/* Standalone Web App / iPad Home Screen Install Card */}
-              <PWAInstallButton variant="settings" />
-
-              {/* Typography & Scale */}
-              <div className="flex flex-col gap-3.5 border-t border-white/8 pt-4">
                 <div className="flex items-center justify-between gap-3">
                   <label
                     htmlFor="font-select"
@@ -1385,7 +1272,7 @@ export function SettingsDrawer({
                     onChange={(e) =>
                       onChangeFont(e.target.value as FontOptionId)
                     }
-                    className="h-11 w-52 sm:w-60 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+                    className="h-11 w-52 sm:w-64 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
                   >
                     {FONT_OPTIONS.map((font) => (
                       <option key={font.id} value={font.id}>
@@ -1411,7 +1298,7 @@ export function SettingsDrawer({
                       step={0.5}
                       value={settings.clockSizeVw}
                       onChange={(e) => onChangeSize(parseFloat(e.target.value))}
-                      className="h-8 w-40 sm:w-48 accent-emerald-400 cursor-pointer"
+                      className="h-8 w-40 sm:w-52 accent-emerald-400 cursor-pointer"
                     />
                     <span className="w-9 text-right text-xs font-medium text-slate-400 tabular-nums">
                       {settings.clockSizeVw.toFixed(1)}
@@ -1420,136 +1307,188 @@ export function SettingsDrawer({
                 </div>
               </div>
 
-              {/* Color Themes, Solar Schedule & Custom Pickers */}
-              <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-medium text-slate-200">
-                      Sunset / Sunrise Schedule
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      Midnight theme at sunset, preferred theme at sunrise
-                    </span>
+              {/* Group 2: Main Screen Controls & Overlays */}
+              <div className="flex flex-col gap-3.5 border-t border-white/8 pt-4">
+                <h3 className="text-xs font-semibold text-slate-200">
+                  Main Screen Controls &amp; Overlays
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                  {/* Quick Start Jujitsu Button Toggle */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium text-slate-200">
+                        Quick Start Jujitsu
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        One-click Jujitsu button on main screen
+                      </span>
+                    </div>
+                    <button
+                      id="show-jujitsu-quickstart-switch"
+                      type="button"
+                      role="switch"
+                      aria-checked={settings.showJujitsuQuickStart}
+                      aria-label="Quick Start Jujitsu"
+                      onClick={onToggleShowJujitsuQuickStart}
+                      className={`flex h-11 min-w-[84px] items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        settings.showJujitsuQuickStart
+                          ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>
+                        {settings.showJujitsuQuickStart ? 'Show' : 'Hide'}
+                      </span>
+                    </button>
                   </div>
-                  <button
-                    id="solar-schedule-switch"
-                    type="button"
-                    role="switch"
-                    aria-checked={settings.solarSchedule.enabled}
-                    aria-label="Sunset / Sunrise Schedule"
-                    onClick={onToggleSolarSchedule}
-                    className={`flex h-11 min-w-[86px] items-center justify-center gap-1.5 rounded-lg border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      settings.solarSchedule.enabled
-                        ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
-                        : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {isMidnightScheduledActive ? (
+
+                  {/* Radio / Music Control Bar Toggle */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium text-slate-200">
+                        Radio / Music Control
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Player bar on main clock screen
+                      </span>
+                    </div>
+                    <button
+                      id="show-radio-control-switch"
+                      type="button"
+                      role="switch"
+                      aria-checked={settings.showRadioControl}
+                      aria-label="Radio / Music Control"
+                      onClick={onToggleShowRadioControl}
+                      className={`flex h-11 min-w-[84px] items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        settings.showRadioControl
+                          ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Radio className="h-4 w-4" aria-hidden="true" />
+                      <span>{settings.showRadioControl ? 'On' : 'Off'}</span>
+                    </button>
+                  </div>
+
+                  {/* Show Date (DD/MM/YYYY) Toggle */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium text-slate-200">
+                        Show Date
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Calendar date (DD/MM/YYYY)
+                      </span>
+                    </div>
+                    <button
+                      id="show-date-switch"
+                      type="button"
+                      role="switch"
+                      aria-checked={settings.showDate}
+                      aria-label="Show Date"
+                      onClick={onToggleShowDate}
+                      className={`flex h-11 min-w-[84px] items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        settings.showDate
+                          ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Calendar className="h-4 w-4" aria-hidden="true" />
+                      <span>{settings.showDate ? 'On' : 'Off'}</span>
+                    </button>
+                  </div>
+
+                  {/* Session Elapsed Sub-Counter Toggle */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium text-slate-200">
+                        Session Sub-Counter
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Total session time (HH:MM:SS)
+                      </span>
+                    </div>
+                    <button
+                      id="session-subcounter-switch"
+                      type="button"
+                      role="switch"
+                      aria-checked={settings.showSessionElapsed}
+                      aria-label="Session Sub-Counter"
+                      onClick={onToggleSessionElapsed}
+                      className={`flex h-11 min-w-[84px] items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        settings.showSessionElapsed
+                          ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Clock className="h-4 w-4" aria-hidden="true" />
+                      <span>{settings.showSessionElapsed ? 'On' : 'Off'}</span>
+                    </button>
+                  </div>
+
+                  {/* Battery Level Corner Indicator Toggle */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium text-slate-200">
+                        Battery Level
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Device charge in top-left corner
+                      </span>
+                    </div>
+                    <button
+                      id="show-battery-level-switch"
+                      type="button"
+                      role="switch"
+                      aria-checked={settings.showBatteryLevel}
+                      aria-label="Battery Level"
+                      onClick={onToggleShowBatteryLevel}
+                      className={`flex h-11 min-w-[84px] items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        settings.showBatteryLevel
+                          ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <BatteryCharging className="h-4 w-4" aria-hidden="true" />
+                      <span>{settings.showBatteryLevel ? 'On' : 'Off'}</span>
+                    </button>
+                  </div>
+
+                  {/* Auto-Dim Burn-In Protection Toggle */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium text-slate-200">
+                        Auto-Dim
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Dims display after 30s idle
+                      </span>
+                    </div>
+                    <button
+                      id="auto-dim-switch"
+                      type="button"
+                      role="switch"
+                      aria-checked={settings.autoDimEnabled}
+                      aria-label="Auto-Dim"
+                      onClick={onToggleAutoDim}
+                      className={`flex h-11 min-w-[84px] items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        settings.autoDimEnabled
+                          ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
                       <Moon className="h-4 w-4" aria-hidden="true" />
-                    ) : (
-                      <Sun className="h-4 w-4" aria-hidden="true" />
-                    )}
-                    <span>{settings.solarSchedule.enabled ? 'On' : 'Off'}</span>
-                  </button>
-                </div>
-
-                {(settings.solarSchedule.enabled || solarGeoError) && (
-                  <div
-                    data-testid="solar-schedule-card"
-                    className="flex flex-col gap-2.5 rounded-xl border border-slate-800/90 bg-slate-900/75 p-3"
-                  >
-                    {solarGeoStatus === 'locating' && (
-                      <p className="text-xs text-slate-300">
-                        Requesting browser geolocation to calculate local sunrise
-                        and sunset...
-                      </p>
-                    )}
-
-                    {solarGeoError && (
-                      <div className="flex items-center justify-between gap-2.5">
-                        <p role="alert" className="text-xs text-amber-300">
-                          {solarGeoError}
-                        </p>
-                        <button
-                          id="refresh-solar-location-btn"
-                          type="button"
-                          onClick={onRefreshSolarLocation}
-                          className="h-9 rounded-lg border border-slate-700 bg-slate-800 px-3 text-xs font-semibold text-slate-100 hover:bg-slate-700 whitespace-nowrap shrink-0 cursor-pointer"
-                        >
-                          Retry
-                        </button>
-                      </div>
-                    )}
-
-                    {settings.solarSchedule.coords && solarTimes && (
-                      <>
-                        <div className="flex items-center justify-between gap-2">
-                          <span
-                            data-testid="solar-active-phase"
-                            className="text-xs font-semibold text-slate-100"
-                          >
-                            {isMidnightScheduledActive
-                              ? 'Night Active · Midnight Theme'
-                              : 'Daytime Active · Preferred Theme'}
-                          </span>
-                          <button
-                            id="refresh-solar-location-btn"
-                            type="button"
-                            aria-label="Update geolocation"
-                            onClick={onRefreshSolarLocation}
-                            className="flex h-8 items-center gap-1 rounded-lg border border-slate-700/90 bg-slate-800/80 px-2.5 text-[11px] font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors shrink-0 cursor-pointer"
-                          >
-                            <LocateFixed
-                              className="h-3.5 w-3.5"
-                              aria-hidden="true"
-                            />
-                            <span>Update GPS</span>
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-2">
-                            <Sunrise
-                              className="h-4 w-4 text-amber-300 shrink-0"
-                              aria-hidden="true"
-                            />
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-[11px] text-slate-400">
-                                Sunrise
-                              </span>
-                              <span
-                                data-testid="solar-sunrise-time"
-                                className="font-mono text-xs font-semibold text-slate-100 tabular-nums"
-                              >
-                                {solarTimes.sunriseLabel}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-2">
-                            <Sunset
-                              className="h-4 w-4 text-indigo-300 shrink-0"
-                              aria-hidden="true"
-                            />
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-[11px] text-slate-400">
-                                Sunset
-                              </span>
-                              <span
-                                data-testid="solar-sunset-time"
-                                className="font-mono text-xs font-semibold text-slate-100 tabular-nums"
-                              >
-                                {solarTimes.sunsetLabel}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    )}
+                      <span>{settings.autoDimEnabled ? 'On' : 'Off'}</span>
+                    </button>
                   </div>
-                )}
+                </div>
+              </div>
 
-                <div className="flex items-center justify-between pt-1">
+              {/* Group 3: Color Themes, Custom Swatches & Solar Schedule */}
+              <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
+                <div className="flex items-center justify-between">
                   <h3 className="text-xs font-semibold text-slate-200">
                     {settings.solarSchedule.enabled
                       ? 'Preferred Daytime Theme'
@@ -1561,6 +1500,7 @@ export function SettingsDrawer({
                     </span>
                   )}
                 </div>
+
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {COLOR_PRESETS.map((preset) => {
                     const isSelected =
@@ -1589,8 +1529,8 @@ export function SettingsDrawer({
                 </div>
 
                 {/* Custom Clock & Background Pickers Side-by-Side */}
-                <div className="grid grid-cols-2 gap-2.5 pt-1">
-                  <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-1.5">
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="flex items-center justify-between gap-2 border-t border-white/8 pt-2.5">
                     <div className="flex flex-col min-w-0">
                       <label
                         htmlFor="color-picker"
@@ -1598,7 +1538,7 @@ export function SettingsDrawer({
                       >
                         Digits
                       </label>
-                      <span className="text-[11px] font-mono text-slate-400 uppercase">
+                      <span className="text-[11px] font-mono text-slate-400 tabular-nums">
                         {settings.clockColor}
                       </span>
                     </div>
@@ -1612,7 +1552,7 @@ export function SettingsDrawer({
                     />
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-1.5">
+                  <div className="flex items-center justify-between gap-2 border-t border-white/8 pt-2.5">
                     <div className="flex flex-col min-w-0">
                       <label
                         htmlFor="bg-picker"
@@ -1620,7 +1560,7 @@ export function SettingsDrawer({
                       >
                         Canvas
                       </label>
-                      <span className="text-[11px] font-mono text-slate-400 uppercase">
+                      <span className="text-[11px] font-mono text-slate-400 tabular-nums">
                         {settings.bgColor}
                       </span>
                     </div>
@@ -1634,20 +1574,197 @@ export function SettingsDrawer({
                     />
                   </div>
                 </div>
+
+                <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-3.5">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium text-slate-200">
+                      Sunset / Sunrise Schedule
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Midnight theme at sunset, preferred theme at sunrise
+                    </span>
+                  </div>
+                  <button
+                    id="solar-schedule-switch"
+                    type="button"
+                    role="switch"
+                    aria-checked={settings.solarSchedule.enabled}
+                    aria-label="Sunset / Sunrise Schedule"
+                    onClick={onToggleSolarSchedule}
+                    className={`flex h-11 min-w-[84px] items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                      settings.solarSchedule.enabled
+                        ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
+                        : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {isMidnightScheduledActive ? (
+                      <Moon className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <Sun className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    <span>{settings.solarSchedule.enabled ? 'On' : 'Off'}</span>
+                  </button>
+                </div>
+
+                {(settings.solarSchedule.enabled || solarGeoError) && (
+                  <div
+                    data-testid="solar-schedule-card"
+                    className="flex flex-col gap-2.5 border-t border-white/8 pt-3"
+                  >
+                    {solarGeoStatus === 'locating' && (
+                      <p className="text-xs text-slate-300">
+                        Requesting browser geolocation to calculate local sunrise
+                        and sunset...
+                      </p>
+                    )}
+
+                    {solarGeoError && (
+                      <div className="flex items-center justify-between gap-2.5">
+                        <p role="alert" className="text-xs text-amber-300">
+                          {solarGeoError}
+                        </p>
+                        <button
+                          id="refresh-solar-location-btn"
+                          type="button"
+                          onClick={onRefreshSolarLocation}
+                          className="h-11 rounded-lg border border-slate-700 bg-slate-800 px-3.5 text-xs font-semibold text-slate-100 hover:bg-slate-700 whitespace-nowrap shrink-0 cursor-pointer"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+
+                    {settings.solarSchedule.coords && solarTimes && (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            data-testid="solar-active-phase"
+                            className="text-xs font-semibold text-slate-100"
+                          >
+                            {isMidnightScheduledActive
+                              ? 'Night Active · Midnight Theme'
+                              : 'Daytime Active · Preferred Theme'}
+                          </span>
+                          <button
+                            id="refresh-solar-location-btn"
+                            type="button"
+                            aria-label="Update geolocation"
+                            onClick={onRefreshSolarLocation}
+                            className="flex h-11 items-center gap-1.5 rounded-lg border border-slate-700/90 bg-slate-800/80 px-3 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                          >
+                            <LocateFixed
+                              className="h-3.5 w-3.5"
+                              aria-hidden="true"
+                            />
+                            <span>Update GPS</span>
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex items-center gap-2 py-1">
+                            <Sunrise
+                              className="h-4 w-4 text-amber-300 shrink-0"
+                              aria-hidden="true"
+                            />
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[11px] text-slate-400">
+                                Sunrise
+                              </span>
+                              <span
+                                data-testid="solar-sunrise-time"
+                                className="font-mono text-xs font-semibold text-slate-100 tabular-nums"
+                              >
+                                {solarTimes.sunriseLabel}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 py-1">
+                            <Sunset
+                              className="h-4 w-4 text-indigo-300 shrink-0"
+                              aria-hidden="true"
+                            />
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[11px] text-slate-400">
+                                Sunset
+                              </span>
+                              <span
+                                data-testid="solar-sunset-time"
+                                className="font-mono text-xs font-semibold text-slate-100 tabular-nums"
+                              >
+                                {solarTimes.sunsetLabel}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {/* Group 4: Standalone Web App / iPad Home Screen Install */}
+              <PWAInstallButton variant="settings" />
             </div>
           )}
 
-          {/* TAB 3: ALERTS & GESTURES */}
+          {/* SECTION 4: RADIO & MUSIC CONNECTORS */}
+          {activeTab === 'radio' && (
+            <RadioConnectorTab
+              media={settings.media}
+              onUpdateMedia={onUpdateMedia}
+              onPlayMediaNow={onPlayMediaNow}
+              onPauseMediaNow={onPauseMediaNow}
+            />
+          )}
+
+          {/* SECTION 5: ALERTS, AUDIO & CLOCK GESTURES */}
           {activeTab === 'alerts' && (
             <div
               id="panel-alerts"
               role="tabpanel"
               aria-labelledby="tab-alerts"
-              className="flex flex-col gap-4"
+              className="flex flex-col gap-5"
             >
-              {/* Audio Alerts */}
+              {/* Clock Face Gestures */}
               <div className="flex flex-col gap-3">
+                <h3 className="text-xs font-semibold text-slate-200">
+                  Clock Face Gestures
+                </h3>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium text-slate-200">
+                      Double-Tap Reset
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Single-click starts/stops any timer · Double-click resets
+                    </span>
+                  </div>
+                  <button
+                    id="double-tap-reset-switch"
+                    type="button"
+                    role="switch"
+                    aria-checked={settings.doubleTapResetEnabled}
+                    aria-label="Double-Tap Reset"
+                    onClick={onToggleDoubleTapReset}
+                    className={`flex h-11 min-w-[82px] items-center justify-center gap-1.5 rounded-lg border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                      settings.doubleTapResetEnabled
+                        ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
+                        : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                    <span>{settings.doubleTapResetEnabled ? 'On' : 'Off'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Audio Alerts */}
+              <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
+                <h3 className="text-xs font-semibold text-slate-200">
+                  Alarm &amp; Clock Audio
+                </h3>
+
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs font-medium text-slate-300 whitespace-nowrap shrink-0">
                     Alarm Sound
@@ -1701,7 +1818,7 @@ export function SettingsDrawer({
                     onChange={(e) =>
                       onChangeAlarmSoundId(e.target.value as AlarmSoundId)
                     }
-                    className="h-11 w-52 sm:w-60 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
+                    className="h-11 w-52 sm:w-64 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-medium text-white focus-visible:border-emerald-400 focus-visible:outline-none"
                   >
                     {ALARM_SOUND_OPTIONS.map((tone) => (
                       <option key={tone.id} value={tone.id}>
@@ -1781,6 +1898,10 @@ export function SettingsDrawer({
 
               {/* Visual & Haptic Notifications */}
               <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
+                <h3 className="text-xs font-semibold text-slate-200">
+                  Visual &amp; Haptic Cues
+                </h3>
+
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs font-medium text-slate-300 whitespace-nowrap shrink-0">
                     Screen Flash
@@ -1851,33 +1972,6 @@ export function SettingsDrawer({
                     </button>
                   </div>
                 </div>
-              </div>
-
-              {/* Touch Gestures */}
-              <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-4">
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-slate-200">
-                    Double-Tap Reset
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    Double-tap clock face to reset active timer
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={settings.doubleTapResetEnabled}
-                  aria-label="Double-Tap Reset"
-                  onClick={onToggleDoubleTapReset}
-                  className={`flex h-11 min-w-[82px] items-center justify-center gap-1.5 rounded-lg border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    settings.doubleTapResetEnabled
-                      ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-300'
-                      : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                  <span>{settings.doubleTapResetEnabled ? 'On' : 'Off'}</span>
-                </button>
               </div>
             </div>
           )}
